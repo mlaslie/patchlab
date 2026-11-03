@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PatchLab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="ic-router" viewBox="0 0 64 46">
+      <path class="body" d="M4 14v17c0 7 12.5 12.500 28 12.500S60 38 60 31V14z"/>
+      <ellipse class="top" cx="32" cy="14" rx="28" ry="12"/>
+      <path class="mark" d="M23 19l-9 4m0 0h5m-5 0l2-4M41 9l9-4m0 0h-5m5 0l-2 4M23 9l-9-4m0 0l2 4m-2-4h5M41 19l9 4m0 0l-2-4m2 4h-5"/>
+    </symbol>
+    <symbol id="ic-l2switch" viewBox="0 0 64 46">
+      <path class="top" d="M3 13L13 3h48L51 13z"/>
+      <path class="body" d="M3 13h48v30H3z"/>
+      <path class="side" d="M51 13L61 3v30L51 43z"/>
+      <path class="mark" d="M11 22h14m0 0l-4-3m4 3l-4 3M29 22h14m-14 0l4-3m-4 3l4 3M11 34h14m-14 0l4-3m-4 3l4 3M29 34h14m0 0l-4-3m4 3l-4 3"/>
+    </symbol>
+    <symbol id="ic-l3switch" viewBox="0 0 64 46">
+      <path class="top" d="M3 13L13 3h48L51 13z"/>
+      <path class="body" d="M3 13h48v30H3z"/>
+      <path class="side" d="M51 13L61 3v30L51 43z"/>
+      <path class="mark" d="M9 28h12m0 0l-4-3m4 3l-4 3M21 36H9m0 0l4-3m-4 3l4 3"/>
+      <text class="glyph" x="36" y="35" text-anchor="middle">L3</text>
+    </symbol>
+    <symbol id="ic-pc" viewBox="0 0 64 46">
+      <path class="body" d="M12 3h40v28H12z"/>
+      <path class="screen" d="M16 7h32v20H16z"/>
+      <path class="mark" d="M32 31v7M22 38h20"/>
+      <path class="top" d="M14 41h36l3 3H11z"/>
+    </symbol>
+    <symbol id="ic-laptop" viewBox="0 0 64 46">
+      <path class="body" d="M14 5h36v27H14z"/>
+      <path class="screen" d="M18 9h28v19H18z"/>
+      <path class="top" d="M14 32h36l8 9H6z"/>
+    </symbol>
+    <symbol id="ic-server" viewBox="0 0 64 46">
+      <path class="body" d="M20 2h24v42H20z"/>
+      <path class="mark" d="M25 9h14M25 15h14M25 21h14"/>
+      <circle class="led" cx="32" cy="36" r="2.500"/>
+    </symbol>
+    <symbol id="ic-printer" viewBox="0 0 64 46">
+      <path class="top" d="M20 3h24v13H20z"/>
+      <path class="body" d="M8 16h48v20H8z"/>
+      <path class="screen" d="M18 30h28v14H18z"/>
+      <circle class="led" cx="49" cy="22" r="2"/>
+    </symbol>
+    <symbol id="ic-internet" viewBox="0 0 64 46">
+      <path class="body" d="M17 40c-7 0-12-5-12-11 0-6 5-10 11-10 1-8 8-14 16-14 7 0 13 4 15 11 7 0 12 5 12 12s-5 12-12 12z"/>
+      <path class="mark" d="M22 27h20M32 17v20M24 20c5 3 11 3 16 0M24 34c5-3 11-3 16 0"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div id="app">
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span>PatchLab</div>
+    <input id="lab-name" class="lab-name" aria-label="Lab name" spellcheck="false">
+    <div class="top-actions">
+      <button id="btn-undo" class="btn" title="Undo (Cmd/Ctrl+Z)">Undo</button>
+      <button id="btn-redo" class="btn" title="Redo (Shift+Cmd/Ctrl+Z)">Redo</button>
+      <span class="sep"></span>
+      <div class="menu-wrap">
+        <button id="btn-labs" class="btn" aria-haspopup="true" aria-expanded="false">Labs</button>
+        <div id="menu-labs" class="menu" hidden></div>
+      </div>
+      <button id="btn-theme" class="btn" title="Switch theme">Theme</button>
+    </div>
+  </header>
+
+  <aside class="palette" id="palette" aria-label="Device palette"></aside>
+
+  <main class="stage" id="stage">
+    <svg id="canvas" role="application" aria-label="Network topology canvas">
+      <defs>
+        <pattern id="dots" width="20" height="20" patternUnits="userSpaceOnUse"><circle class="grid-dot" cx="1" cy="1" r="1"/></pattern>
+      </defs>
+      <rect id="grid" x="-20000" y="-20000" width="40000" height="40000" fill="url(#dots)"/>
+      <g id="world">
+        <g id="layer-links"></g>
+        <g id="layer-nodes"></g>
+        <g id="layer-anim" pointer-events="none"></g>
+        <line id="rubber" hidden/>
+      </g>
+    </svg>
+    <div class="tools" role="toolbar" aria-label="Canvas tools">
+      <button class="tool" data-tool="select" title="Select and move (V)">Select</button>
+      <button class="tool" data-tool="ethernet" title="Draw an Ethernet cable: press on the source device and drag to the destination (E)"><i class="swatch sw-eth"></i>Ethernet</button>
+    </div>
+    <div class="hint" id="hint" hidden></div>
+    <div class="legend" aria-label="Cable legend">
+      <span><i class="lg lg-access"></i>Access</span>
+      <span><i class="lg lg-trunk"></i>Trunk</span>
+      <span><i class="lg lg-routed"></i>Routed</span>
+      <span><i class="lg lg-bundle"></i>EtherChannel</span>
+    </div>
+    <div class="zoom">
+      <button id="zoom-out" class="tool" aria-label="Zoom out">&minus;</button>
+      <button id="zoom-fit" class="tool" title="Fit to screen (F)">Fit</button>
+      <button id="zoom-in" class="tool" aria-label="Zoom in">+</button>
+    </div>
+    <div class="empty" id="empty" hidden>
+      <strong>Drag a device onto the canvas</strong>
+      <span>Then pull from its + handle to another device to cable them.</span>
+    </div>
+  </main>
+
+  <aside class="panel" id="panel" aria-label="Details">
+    <div class="resize" id="resize" aria-hidden="true"></div>
+    <nav class="tabs" id="tabs" role="tablist"></nav>
+    <div class="panel-body" id="panel-body"></div>
+  </aside>
+</div>
+<input type="file" id="file-import" accept=".json,application/json" hidden>
+<dialog id="dlg-import" class="dlg wide" aria-labelledby="dlg-import-title">
+  <form method="dialog">
+    <h2 id="dlg-import-title">Import a configuration</h2>
+    <p id="dlg-import-what">Paste the output of show running-config. It replaces this device's settings; cables stay as they are.</p>
+    <textarea id="dlg-import-text" rows="14" spellcheck="false" placeholder="hostname R1&#10;interface GigabitEthernet0/0&#10; ip address 192.168.1.1 255.255.255.0&#10; no shutdown"></textarea>
+    <div class="btn-row">
+      <button type="button" class="btn small" id="dlg-import-cancel">Cancel</button>
+      <button type="submit" class="btn small primary" value="import">Import</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="dlg-report" class="dlg wide" aria-labelledby="dlg-report-title">
+  <form method="dialog">
+    <h2 id="dlg-report-title">Import report</h2>
+    <div id="dlg-report-body"></div>
+    <div class="btn-row"><button type="submit" class="btn small primary" value="ok">Done</button></div>
+  </form>
+</dialog>
+<dialog id="dlg-save" class="dlg" aria-labelledby="dlg-save-title">
+  <form method="dialog">
+    <h2 id="dlg-save-title">Name this lab</h2>
+    <p>The name is used for the file and shown at the top of the page.</p>
+    <label class="f"><span>Lab name</span><input id="dlg-save-name" maxlength="80" placeholder="e.g. VLAN routing lab 3" spellcheck="false" autocomplete="off" required></label>
+    <p class="dlg-file">Saves as <code id="dlg-save-file">lab.json</code></p>
+    <div class="btn-row">
+      <button type="button" class="btn small" value="cancel" id="dlg-save-cancel">Cancel</button>
+      <button type="submit" class="btn small primary" value="save">Save</button>
+    </div>
+  </form>
+</dialog>
+<div id="ghost" class="ghost" hidden></div>
+<div id="toast" class="toast" role="status" hidden></div>
+
+<script src="js/net.js"></script>
+<script src="js/catalog.js"></script>
+<script src="js/model.js"></script>
+<script src="js/configgen.js"></script>
+<script src="js/stp.js"></script>
+<script src="js/simulate.js"></script>
+<script src="js/ipv6.js"></script>
+<script src="js/subnet.js"></script>
+<script src="js/export.js"></script>
+<script src="js/guide.js"></script>
+<script src="js/importer.js"></script>
+<script src="js/validate.js"></script>
+<script src="js/samples.js"></script>
+<script src="js/canvas.js"></script>
+<script src="js/inspector.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

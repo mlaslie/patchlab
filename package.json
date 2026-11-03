@@ -1,0 +1,10 @@
+{
+  "name": "patchlab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Drag-and-drop Cisco lab topology builder that generates IOS configs and predicts end-to-end reachability",
+  "scripts": {
+    "test": "node test/run.js",
+    "build": "node scripts/bundle.js"
+  }
+}
