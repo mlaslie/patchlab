@@ -401,10 +401,13 @@ pre.cli .typed { font-weight: 600; }
 .cli-term { display: flex; flex-direction: column; gap: 8px; min-height: 0; min-width: 0; }
 .cli-term-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .cli-term-head b { font: 600 18px var(--font-label); }
-.term { flex: 1 1 auto; min-height: 200px; margin: 0; overflow: auto; background: var(--cli-bg); color: var(--cli-fg); font: 13px/1.45 var(--font-mono); padding: 12px 14px; border-radius: 8px 8px 0 0; white-space: pre-wrap; word-break: break-word; }
-.term-in { display: flex; align-items: center; gap: 0; background: var(--cli-bg); border-radius: 0 0 8px 8px; padding: 0 14px 12px; margin-top: -8px; font: 13px var(--font-mono); }
+/* Output and prompt scroll together, so the prompt sits under the last line as on a real console. */
+.term-box { flex: 1 1 auto; min-height: 200px; overflow: auto; background: var(--cli-bg); border-radius: 8px; padding: 12px 14px; cursor: text; }
+.term { margin: 0; background: none; color: var(--cli-fg); font: 13px/1.45 var(--font-mono); white-space: pre-wrap; word-break: break-word; }
+.term:empty { display: none; }
+.term-in { display: flex; align-items: center; gap: 0; font: 13px/1.45 var(--font-mono); }
 .term-in .prompt { color: var(--cli-key); white-space: nowrap; }
-.term-in input { flex: 1; min-width: 0; background: transparent; border: 0; color: var(--cli-fg); font: inherit; padding: 4px 0 4px 2px; outline: none; caret-color: var(--cli-val); }
+.term-in input { flex: 1; min-width: 0; background: transparent; border: 0; color: var(--cli-fg); font: inherit; padding: 0 0 0 2px; height: 1.45em; outline: none; caret-color: var(--cli-val); }
 .meter { height: 6px; background: var(--sunken); border-radius: 3px; overflow: hidden; }
 .meter i { display: block; height: 100%; background: var(--good); border-radius: 3px; }
 .cell.blocked { background: var(--sunken); color: var(--muted); }
@@ -416,7 +419,7 @@ pre.cli .typed { font-weight: 600; }
   .cli-page { overflow-y: auto; }
   .cli-layout { height: auto; grid-template-columns: minmax(0, 1fr); padding: 12px 16px 40px; }
   .cli-left, .cli-right { overflow: visible; }
-  .term { min-height: 320px; max-height: 60vh; }
+  .term-box { min-height: 320px; max-height: 60vh; }
 }
 
 /* Ask PatchLab */

@@ -42,8 +42,8 @@
         <section class="cli-term">
           <div class="cli-term-head"><div><b id="cli-title"></b><span class="sub" id="cli-sub"></span></div>
             <div class="btn-row"><button type="button" class="btn small" data-c="clear">Clear screen</button><button type="button" class="btn small" data-c="reset">Reset device</button><button type="button" class="btn small" data-c="solution">Show solution</button></div></div>
-          <pre id="cli-out" class="term" tabindex="-1"></pre>
-          <form id="cli-form" class="term-in"><label for="cli-in" id="cli-prompt" class="prompt"></label><input id="cli-in" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Command"></form>
+          <div class="term-box" id="cli-box"><pre id="cli-out" class="term" tabindex="-1"></pre>
+          <form id="cli-form" class="term-in"><label for="cli-in" id="cli-prompt" class="prompt"></label><input id="cli-in" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Command"></form></div>
           <p class="note">Type IOS commands as on the real console. Abbreviations work (conf t, int g0/1, no shut, wr), Tab completes commands and interface names (int gig → GigabitEthernet0/), ? lists what can come next (sh ?, sw?), ↑/↓ recall history, Ctrl+Z ends configuration. PCs take ipconfig and ping.</p>
         </section>
         <aside class="cli-right"><div class="cli-card" id="cli-score"></div><div class="cli-card" id="cli-ask"></div></aside>
@@ -51,7 +51,7 @@
       <dialog id="dlg-topo" class="dlg wide"><form method="dialog"><h2>Topology</h2><div id="dlg-topo-body"></div><div class="btn-row"><button class="btn small primary" value="ok">Close</button></div></form></dialog>`;
       el = {
         devs: root.querySelector('#cli-devs'), brief: root.querySelector('#cli-brief'), title: root.querySelector('#cli-title'), sub: root.querySelector('#cli-sub'),
-        out: root.querySelector('#cli-out'), form: root.querySelector('#cli-form'), prompt: root.querySelector('#cli-prompt'), input: root.querySelector('#cli-in'),
+        box: root.querySelector('#cli-box'), out: root.querySelector('#cli-out'), form: root.querySelector('#cli-form'), prompt: root.querySelector('#cli-prompt'), input: root.querySelector('#cli-in'),
         score: root.querySelector('#cli-score'), ask: root.querySelector('#cli-ask'),
       };
       el.form.addEventListener('submit', (e) => {
@@ -59,7 +59,7 @@
         submit(el.input.value);
       });
       el.input.addEventListener('keydown', onKey);
-      el.out.addEventListener('click', () => { if (!getSelection().toString()) el.input.focus(); });
+      el.box.addEventListener('click', () => { if (!getSelection().toString()) el.input.focus(); });
       root.addEventListener('click', onClick);
       root.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && e.target.matches('.ask input')) {
@@ -273,8 +273,8 @@
       el.title.textContent = d.name;
       el.sub.textContent = ` ${MODELS[d.model].label}`;
       el.out.textContent = lines.join('\n');
-      el.out.scrollTop = el.out.scrollHeight;
       el.prompt.textContent = P.promptFor(ctxFor(d.id), d.id);
+      el.box.scrollTop = el.box.scrollHeight;
       root.querySelectorAll('[data-c="reset"],[data-c="solution"],[data-c="resetall"]').forEach((b) => {
         if (b.dataset.c !== armed) b.textContent = { reset: 'Reset device', solution: 'Show solution', resetall: 'Reset all devices' }[b.dataset.c];
       });
