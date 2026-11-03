@@ -128,7 +128,7 @@ change, run `npm run build` and the `gcloud run deploy` line again.
    **Show** narrows it to one feature, such as DHCP, EtherChannel, ACLs, NAT or IPv6.
    **Verify** lists problems, shows a ping matrix and traces any test traffic (IPv4 or IPv6)
    hop by hop, animating the packet on the canvas with the route, ACL or NAT step at each hop.
-12. **Tools** has an IPv4 subnet calculator and VLSM planner (which can write subnets into the
+12. **Tools** (top bar, beside **Designer**) opens a full-width page with an IPv4 subnet calculator and VLSM planner (which can write subnets into the
    VLAN list), an IPv6 prefix calculator that splits a block into numbered subnets, the step-by-step build guide with a check after each step, and exports: SVG and
    PNG drawings, a printable answer sheet, and a Cisco Modeling Labs topology file.
 

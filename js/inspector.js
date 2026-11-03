@@ -13,7 +13,10 @@
   const esc = (s) => String(s === undefined || s === null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
   function create(App) {
-    const root = document.getElementById('panel-body');
+    const panelBody = document.getElementById('panel-body');
+    const toolsBody = document.getElementById('tools-body');
+    // Tools fill their own page; everything else renders into the side panel.
+    let root = panelBody;
     const tabsEl = document.getElementById('tabs');
     let binds = [];
     let acts = [];
@@ -1399,7 +1402,7 @@
         t.rows = App.project.vlans.filter((v) => v.id !== 1).map((v) => ({ name: v.name, hosts: v.subnet ? 2 ** (32 - N.maskToLen(v.mask)) - 2 : 20 }));
         App.renderPanel();
       };
-      return `<div class="sect"><div class="sect-head"><h3>Subnet calculator</h3></div>
+      return `<div class="tool-cols"><div class="sect"><div class="sect-head"><h3>Subnet calculator</h3></div>
           <div class="grid">${field('Address', input(t.ip, quiet((v) => { const m = /^(.+)\/(\d+)$/.exec(v.trim()); t.ip = m ? m[1] : v.trim(); if (m) t.mask = `/${m[2]}`; }), { mono: true, ph: '192.168.10.77/26', label: 'Address' }))}
           ${field('Mask or prefix', input(t.mask, quiet((v) => { t.mask = v.trim(); }), { mono: true, ph: '/26', label: 'Mask' }))}</div>${facts}</div>
         <div class="sect"><div class="sect-head"><h3>VLSM planner</h3><div class="btn-row">${btn('From VLANs', fromVlans)}${btn('Add segment', () => { t.rows.push({ name: `NET${t.rows.length + 1}`, hosts: 10 }); App.renderPanel(); })}</div></div>
@@ -1407,7 +1410,7 @@
           ${rows ? `<table><thead><tr><th>Segment</th><th>Hosts</th><th></th></tr></thead><tbody>${rows}</tbody></table>` : ''}
           <p class="note">The largest segment is placed first, each on the next boundary its size allows. Point-to-point links need 2 hosts, which gives a /30.</p>
           ${plan.error ? `<div class="verdict no">Does not fit<small>${esc(plan.error)}</small></div>` : ''}${out}
-          ${plan.rows && plan.rows.length && !plan.error ? `<div class="btn-row">${btn('Apply to VLANs', apply, 'primary')}</div><p class="note">Segments are matched to VLANs by name; new names become new VLANs.</p>` : ''}</div>`;
+          ${plan.rows && plan.rows.length && !plan.error ? `<div class="btn-row">${btn('Apply to VLANs', apply, 'primary')}</div><p class="note">Segments are matched to VLANs by name; new names become new VLANs.</p>` : ''}</div></div>`;
     }
 
     function subnet6Tool() {
@@ -1433,13 +1436,13 @@
         <table class="nbrs"><thead><tr><th>#</th><th>Subnet and last address</th></tr></thead><tbody>${sp.rows.map((r) => `<tr>
           <td class="mono">${esc(r.index)}</td><td class="mono">${esc(r.net)}/${r.len}<div class="sub wrap">to ${esc(r.last)}</div></td></tr>`).join('')}</tbody></table>
         <div class="btn-row">${btn('Previous', step(-8))}${btn('Next', step(8))}${btn('Last', () => { t.from = (BigInt(sp.total) - 8n < 0n ? 0n : BigInt(sp.total) - 8n).toString(); App.renderPanel(); })}</div>`;
-      return `<div class="sect"><div class="sect-head"><h3>IPv6 prefix calculator</h3></div>
+      return `<div class="tool-cols"><div class="sect"><div class="sect-head"><h3>IPv6 prefix calculator</h3></div>
           ${field('Prefix or address', input(t.prefix, quiet((v) => { t.prefix = v.trim(); t.from = '0'; }), { mono: true, ph: '2001:db8:acad::/48', label: 'IPv6 prefix' }))}${facts}</div>
         ${c.error ? '' : `<div class="sect"><div class="sect-head"><h3>Split into subnets</h3></div>
           <div class="grid">${field('New prefix length', select(t.newLen, (lens.includes(+t.newLen) ? lens : [...lens, +t.newLen].filter((n) => n > c.len && n <= 128).sort((a, b) => a - b)).map((n) => [n, `/${n}${n === 64 ? ' (LAN)' : n === 127 ? ' (point-to-point)' : ''}`]), quiet((v) => { t.newLen = +v; t.from = '0'; }), 'New prefix length'))}
           ${field('Jump to subnet #', input(t.from, quiet((v) => { t.from = /^\d+$/.test(v.trim()) ? v.trim() : '0'; }), { mono: true, label: 'Subnet number' }))}</div>
           ${splitHtml}
-          <p class="note">LANs use /64 so SLAAC works. Sites usually get a /48 (65,536 LANs) or a /56 (256 LANs). Links between routers often use /64 or /127.</p></div>`}`;
+          <p class="note">LANs use /64 so SLAAC works. Sites usually get a /48 (65,536 LANs) or a /56 (256 LANs). Links between routers often use /64 or /127.</p></div>`}</div>`;
     }
 
     function guideTool() {
@@ -1454,15 +1457,15 @@
         <p class="note">Each device's configuration in the order you would type it, switches first, with a check after every step. Run checks from privileged EXEC, or put "do" in front inside configuration mode.</p>
         <div class="chips">${chips}</div>
         ${shown.map(({ device: d, steps }) => `<div class="sect"><div class="sect-head"><h3>${esc(d.name)}</h3><span class="sub">${esc(MODELS[d.model].label)}</span></div>
-          ${steps.map((st, i) => `<div class="step"><div class="step-head"><span class="step-n">${i + 1}</span><b>${esc(st.title)}</b></div>
+          <div class="guide-steps">${steps.map((st, i) => `<div class="step"><div class="step-head"><span class="step-n">${i + 1}</span><b>${esc(st.title)}</b></div>
             <pre class="cli scroll">${esc(st.commands.join('\n'))}</pre>
-            ${st.check.cmd || st.check.expect.length ? `<div class="step-check">${st.check.cmd ? `Check <code>${esc(st.check.cmd)}</code>` : 'Check'}${st.check.expect.length ? `<ul>${st.check.expect.map((e) => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}</div>` : ''}</div>`).join('')}</div>`).join('')}`;
+            ${st.check.cmd || st.check.expect.length ? `<div class="step-check">${st.check.cmd ? `Check <code>${esc(st.check.cmd)}</code>` : 'Check'}${st.check.expect.length ? `<ul>${st.check.expect.map((e) => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}</div>` : ''}</div>`).join('')}</div></div>`).join('')}`;
     }
 
     function exportTool() {
       const p = App.project;
       const table = PL.exporter.cmlPortTable(p).filter((x) => x.map.length);
-      return `<div class="sect"><div class="sect-head"><h3>Topology drawing</h3></div>
+      return `<div class="tool-cols"><div class="sect"><div class="sect-head"><h3>Topology drawing</h3></div>
           <div class="btn-row">${btn('Download SVG', () => App.exportSvg())}${btn('Download PNG', () => App.exportPng())}</div>
           <p class="note">The canvas as it stands, cropped to the devices, in light colours for printing or slides.</p></div>
         <div class="sect"><div class="sect-head"><h3>Answer sheet</h3></div>
@@ -1472,14 +1475,14 @@
           <div class="btn-row">${btn('Download CML lab (.yaml)', () => App.download(`${p.name.replace(/\s+/g, '-')}.cml.yaml`, PL.exporter.cmlYaml(p, App.sim), 'application/yaml'))}</div>
           <p class="note">Import it in CML 2 with Import lab. Routers become IOSv, switches IOSvL2 and end devices Alpine desktops, each with its configuration. Ports are renumbered in order:</p>
           ${table.length ? `<table class="nbrs"><thead><tr><th>Device</th><th>Node</th><th>Ports</th></tr></thead><tbody>${table.map((x) => `<tr><td>${esc(x.name)}</td><td class="mono">${esc(x.def)}</td>
-            <td class="mono">${esc(x.map.map(([a, b]) => `${shortName(a)}→${shortName(b)}`).join(', '))}</td></tr>`).join('')}</tbody></table>` : ''}</div>`;
+            <td class="mono">${esc(x.map.map(([a, b]) => `${shortName(a)}→${shortName(b)}`).join(', '))}</td></tr>`).join('')}</tbody></table>` : ''}</div></div>`;
     }
 
     function toolsView() {
       const list = [['subnet', 'IPv4 subnets'], ['subnet6', 'IPv6 subnets'], ['guide', 'Build guide'], ['export', 'Export']];
       const cur = App.ui.toolTab;
       const body = cur === 'guide' ? guideTool() : cur === 'export' ? exportTool() : cur === 'subnet6' ? subnet6Tool() : subnetTool();
-      return subtabs('toolTab', list, cur) + body;
+      return `<div class="tools-head"><h2>Tools</h2>${subtabs('toolTab', list, cur)}</div>${body}`;
     }
 
     // ---------- Frame ----------
@@ -1488,27 +1491,29 @@
       const e = App.issues.filter((i) => i.sev === 'error').length;
       const w = App.issues.filter((i) => i.sev === 'warn').length;
       const badge = e ? `<span class="count">${e}</span>` : w ? `<span class="count warn">${w}</span>` : '<span class="count good">OK</span>';
-      const list = [['inspect', 'Inspect'], ['lab', 'Lab'], ['config', 'Configs'], ['verify', `Verify ${badge}`], ['tools', 'Tools']];
+      const list = [['inspect', 'Inspect'], ['lab', 'Lab'], ['config', 'Configs'], ['verify', `Verify ${badge}`]];
       tabsEl.innerHTML = list.map(([k, t]) => `<button type="button" role="tab" aria-selected="${App.tab === k}" class="tab ${App.tab === k ? 'on' : ''}" data-tab="${k}">${t}</button>`).join('');
     }
 
     function render() {
       const active = document.activeElement;
-      const focusId = active && root.contains(active) ? active.id : null;
-      const scroll = root.scrollTop;
+      const target = App.view === 'tools' ? toolsBody : panelBody;
+      const focusId = active && target.contains(active) ? active.id : null;
+      const scroll = target.scrollTop;
       binds = [];
       acts = [];
       seq = 0;
       renderTabs();
-      root.innerHTML = App.tab === 'lab' ? labView() : App.tab === 'config' ? configView() : App.tab === 'verify' ? verifyView() : App.tab === 'tools' ? toolsView() : inspectView();
-      root.scrollTop = scroll;
+      root = App.view === 'tools' ? toolsBody : panelBody;
+      root.innerHTML = App.view === 'tools' ? toolsView() : App.tab === 'lab' ? labView() : App.tab === 'config' ? configView() : App.tab === 'verify' ? verifyView() : inspectView();
+      root.scrollTop = target === root ? scroll : root.scrollTop;
       if (focusId) {
         const el = document.getElementById(focusId);
         if (el) el.focus();
       }
     }
 
-    root.addEventListener('change', (e) => {
+    const onChange = (e) => {
       const i = e.target.getAttribute('data-b');
       if (i === null) return;
       const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
@@ -1517,11 +1522,15 @@
         App.ui.skipCommit = false;
         App.renderPanel();
       } else App.commit();
-    });
+    };
 
-    root.addEventListener('click', (e) => {
+    const onClick = (e) => {
       const el = e.target.closest('[data-a]');
       if (el) acts[+el.getAttribute('data-a')]();
+    };
+    [panelBody, toolsBody].forEach((el) => {
+      el.addEventListener('change', onChange);
+      el.addEventListener('click', onClick);
     });
 
     tabsEl.addEventListener('click', (e) => {

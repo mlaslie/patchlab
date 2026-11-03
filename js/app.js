@@ -13,6 +13,7 @@
     issues: [],
     sel: null,
     tab: 'inspect',
+    view: 'design',
     tool: 'select',
     trace: null,
     ui: {
@@ -51,6 +52,15 @@
   }
 
   App.renderPanel = () => App.inspector.render();
+
+  // The designer (palette, canvas, side panel) or the full-width Tools page.
+  App.setView = (v) => {
+    App.view = v;
+    document.getElementById('app').classList.toggle('view-tools', v === 'tools');
+    document.getElementById('tools-page').hidden = v !== 'tools';
+    document.querySelectorAll('.views [data-view]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.view === v)));
+    App.renderAll();
+  };
 
   App.renderAll = () => {
     App.canvas.render();
@@ -429,7 +439,7 @@
         e.preventDefault();
         return e.shiftKey ? redo() : undo();
       }
-      if (typing) return;
+      if (typing || App.view === 'tools') return;
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         App.deleteSelection();
@@ -468,6 +478,7 @@
       App.project.name = name.value.trim() || 'Untitled lab';
       App.commit();
     });
+    document.querySelectorAll('.views [data-view]').forEach((b) => b.addEventListener('click', () => App.setView(b.dataset.view)));
     document.getElementById('btn-undo').addEventListener('click', undo);
     document.getElementById('btn-redo').addEventListener('click', redo);
 

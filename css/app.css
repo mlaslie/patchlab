@@ -54,6 +54,10 @@ button { cursor: pointer; }
   radial-gradient(circle at 13px 13px, var(--ink) 2.500px, transparent 3px); }
 .lab-name { flex: 1 1 auto; min-width: 60px; max-width: 340px; border: 1px solid transparent; background: transparent; padding: 4px 8px; border-radius: 4px; font-weight: 500; }
 .lab-name:hover { border-color: var(--line); }
+.views { display: flex; border: 1px solid var(--line-strong); border-radius: 5px; overflow: hidden; flex: none; }
+.views button { border: 0; background: transparent; padding: 4px 12px; font-weight: 500; }
+.views button + button { border-left: 1px solid var(--line-strong); }
+.views button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
 .top-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; }
 .sep { width: 1px; height: 20px; background: var(--line); margin: 0 2px; }
 .btn { border: 1px solid var(--line-strong); background: var(--surface); padding: 5px 10px; border-radius: 4px; font-weight: 500; white-space: nowrap; }
@@ -335,3 +339,22 @@ pre.cli .typed { font-weight: 600; }
 .hops .sub.nat { color: var(--info); }
 .route .code.c-blk { background: var(--bad-soft); color: var(--bad); }
 .sub.wrap { overflow-wrap: anywhere; }
+
+/* Tools page */
+#app.view-tools { grid-template: "top" auto "tools" minmax(0, 1fr) / minmax(0, 1fr); }
+#app.view-tools .palette, #app.view-tools .stage, #app.view-tools .panel { display: none; }
+.tools-page { grid-area: tools; overflow-y: auto; min-height: 0; background: var(--bg); }
+.tools-inner { max-width: 1240px; margin: 0 auto; padding: 18px 20px 48px; display: flex; flex-direction: column; gap: 16px; }
+.tools-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.tools-head h2 { font: 600 24px var(--font-label); margin: 0; letter-spacing: .02em; }
+.tools-head .subtabs button { padding: 6px 14px; }
+.tools-page .sect { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+.tools-page .sect .sect { border: 0; padding: 0; }
+.tool-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px; align-items: start; }
+.guide-steps { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 10px; align-items: start; }
+.tools-page .note { max-width: 80ch; }
+@media (max-width: 760px) {
+  #app.view-tools { grid-template: "top" auto "tools" minmax(0, 1fr) / minmax(0, 1fr); }
+  .tools-inner { padding: 14px 16px 40px; }
+}
+.tools-page dl.fact dd { min-width: 0; overflow-wrap: anywhere; }
