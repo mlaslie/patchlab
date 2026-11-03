@@ -414,3 +414,4 @@ pre.cli .typed { font-weight: 600; }
 .ts-checks { margin: 0; padding-left: 18px; }
 .ts-checks code { font: 12px var(--font-mono); }
 .ts-more pre, .ts-fix pre { margin: 0; }
+.step-head .push, .sect-head .push { margin-left: auto; }

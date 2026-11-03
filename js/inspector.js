@@ -1490,8 +1490,10 @@
       return `<div class="sect-head"><h3>Build guide</h3><div class="btn-row">${btn('Copy', () => App.copy(text))}${btn('Download', () => App.download(`${p.name.replace(/\s+/g, '-')}-build-guide.md`, text, 'text/markdown'))}</div></div>
         <p class="note">Each device's configuration in the order you would type it, switches first, with a check after every step. Run checks from privileged EXEC, or put "do" in front inside configuration mode.</p>
         <div class="chips">${chips}</div>
-        ${shown.map(({ device: d, steps }) => `<div class="sect"><div class="sect-head"><h3>${esc(d.name)}</h3><span class="sub">${esc(MODELS[d.model].label)}</span></div>
-          <div class="guide-steps">${steps.map((st, i) => `<div class="step"><div class="step-head"><span class="step-n">${i + 1}</span><b>${esc(st.title)}</b></div>
+        ${shown.map(({ device: d, steps }) => `<div class="sect"><div class="sect-head"><h3>${esc(d.name)}</h3><span class="sub">${esc(MODELS[d.model].label)}</span>
+            ${M.isHost(d) ? '' : `<span class="push">${btn('Copy all steps', () => App.copy(['enable', 'configure terminal', ...steps.flatMap((st) => st.commands), 'end', 'write memory'].join('\n')))}</span>`}</div>
+          <div class="guide-steps">${steps.map((st, i) => `<div class="step"><div class="step-head"><span class="step-n">${i + 1}</span><b>${esc(st.title)}</b>
+            <span class="push">${btn('Copy', () => App.copy(st.commands.join('\n')))}</span></div>
             <pre class="cli scroll">${esc(st.commands.join('\n'))}</pre>
             ${st.check.cmd || st.check.expect.length ? `<div class="step-check">${st.check.cmd ? `Check <code>${esc(st.check.cmd)}</code>` : 'Check'}${st.check.expect.length ? `<ul>${st.check.expect.map((e) => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}</div>` : ''}</div>`).join('')}</div></div>`).join('')}`;
     }

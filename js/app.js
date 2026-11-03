@@ -149,7 +149,8 @@
 
   App.copy = (text) => {
     const fallback = () => {
-      const pre = document.querySelector('.cli');
+      // Select the block showing this text, so Cmd/Ctrl+C copies the right one.
+      const pre = [...document.querySelectorAll('pre')].find((x) => x.textContent === text) || document.querySelector('.cli');
       if (pre) {
         const range = document.createRange();
         range.selectNodeContents(pre);
