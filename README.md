@@ -76,33 +76,73 @@ labs appear at the top of the **Labs** menu to reopen.
 It scales to zero when idle and never runs more than one instance, to keep the cost near nothing.
 
 You need the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install), Node.js and a Google
-Cloud project with billing turned on. Replace `PROJECT_ID`, `PROJECT_NUMBER` (shown by
-`gcloud projects describe PROJECT_ID`) and `you@example.com` below. Each command is a single
-line, so it works in Terminal, PowerShell or Command Prompt.
+Cloud project with billing turned on. Sign in once with `gcloud auth login`.
 
-One-time setup:
+### Setup script
+
+One script does everything: turns on the APIs, creates the bucket and the service account (with
+access to that bucket only), builds and deploys, and gives each listed person sign-in access.
 
 ```bash
-gcloud auth login
+./scripts/setup.sh
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
+```
+
+It asks for each setting, showing a default in brackets: press Enter to keep it or type another.
+The defaults come from [deploy/config.env](deploy/config.env), so edit that file to change them for
+everyone:
+
+| Setting | Default | What it is |
+| --- | --- | --- |
+| `ACCOUNT` | the account gcloud is signed in with | Google account the script runs as |
+| `PROJECT_ID` | the project gcloud is set to | Google Cloud project |
+| `REGION` | `us-central1` | Region for Cloud Run and the bucket |
+| `SERVICE` | `patchlab` | Cloud Run service name |
+| `BUCKET` | `<project>-patchlab-labs` | Bucket for users' labs (names are global) |
+| `SERVICE_ACCOUNT` | `patchlab-run` | Account the app runs as |
+| `IAP_USERS` | (none) | Who may sign in, comma-separated emails |
+| `MEMORY`, `MIN_INSTANCES`, `MAX_INSTANCES`, `CONCURRENCY` | `256Mi`, `0`, `1`, `15` | Size and cost limits |
+
+Your answers are saved to `deploy/config.local.env` (not committed) and become the defaults the
+next time, so shipping a change is just running the script again and pressing Enter. Anything
+that already exists is kept. To see the commands without running them, use
+`DRY_RUN=1 ./scripts/setup.sh` or `scripts\setup.ps1 -DryRun`.
+
+### By hand
+
+The same steps as single-line commands. Replace `PROJECT_ID`, `PROJECT_NUMBER` (from
+`gcloud projects describe PROJECT_ID`) and `you@example.com`.
+
+```bash
 gcloud config set project PROJECT_ID
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com iap.googleapis.com storage.googleapis.com
 gcloud storage buckets create gs://PROJECT_ID-patchlab-labs --location=us-central1 --uniform-bucket-level-access --public-access-prevention
 gcloud iam service-accounts create patchlab-run --display-name="PatchLab on Cloud Run"
 gcloud storage buckets add-iam-policy-binding gs://PROJECT_ID-patchlab-labs --member=serviceAccount:patchlab-run@PROJECT_ID.iam.gserviceaccount.com --role=roles/storage.objectUser
-```
-
-Build and deploy (run again to ship a change):
-
-```bash
 npm run build
 gcloud run deploy patchlab --source . --region us-central1 --iap --no-allow-unauthenticated --service-account patchlab-run@PROJECT_ID.iam.gserviceaccount.com --set-env-vars BUCKET=PROJECT_ID-patchlab-labs,IAP_AUDIENCE=/projects/PROJECT_NUMBER/locations/us-central1/services/patchlab --memory 256Mi --min-instances 0 --max-instances 1 --concurrency 15
-```
-
-Give each person access:
-
-```bash
 gcloud iap web add-iam-policy-binding --resource-type=cloud-run --service=patchlab --region=us-central1 --member=user:you@example.com --role=roles/iap.httpsResourceAccessor --condition=None
 ```
+
+### Letting people outside your organization sign in
+
+If your project belongs to a Google Workspace or Cloud organization, IAP's built-in sign-in
+admits only that organization's accounts. To let others in, such as personal gmail.com accounts:
+
+1. In the Google Cloud console, open **Google Auth Platform → Audience** for the project and set
+   the user type to **External** (fill in the app name and support email if asked). Leaving the
+   app in **Testing** is fine; add each outside person under **Test users**.
+2. Open **Security → Identity-Aware Proxy**, find the Cloud Run service, and switch it from the
+   Google-managed OAuth client to a custom one (the console can create it for you).
+3. Give each person access with `IAP_USERS` in the script, or the `add-iam-policy-binding`
+   command above.
+
+An organization policy that limits members to your own domain
+(`iam.allowedPolicyMemberDomains`) also blocks outside accounts; the script reports that if it
+happens.
 
 The deploy prints the service URL. Open it and sign in with an allowed account; your address
 shows in the top bar with the save status. To try the server on your own machine, with a fake
@@ -225,5 +265,7 @@ js/canvas.js      SVG canvas, drag, pan, zoom, cabling
 js/inspector.js   right-hand panels
 js/app.js         state, undo, persistence, palette, menus
 server/server.js  Cloud Run server: IAP identity check and per-user lab storage
+scripts/setup.sh  Cloud Run setup and deploy (setup.ps1 on Windows)
+deploy/config.env defaults for the setup scripts
 test/run.js       Node test suite (npm test)
 ```

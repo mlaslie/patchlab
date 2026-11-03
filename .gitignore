@@ -3,3 +3,4 @@ dist/
 data/
 .claude/
 .DS_Store
+deploy/config.local.env

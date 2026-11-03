@@ -51,3 +51,5 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` done.
   user's lab in Cloud Storage.
 - [x] **Saved labs in your account.** On Cloud Run, Save lab as a file also stores the lab in
   Cloud Storage under its name, overwriting the previous save; the Labs menu lists them.
+- [x] **Setup scripts.** `scripts/setup.sh` and `scripts/setup.ps1` create the bucket and service
+  account, deploy, and grant sign-in, with defaults from `deploy/config.env`.
