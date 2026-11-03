@@ -81,7 +81,14 @@ async function userOf(req) {
 // ---------- Storage ----------
 
 // Object names use a hash of the stable IAP subject, so emails do not appear in listings.
-const objectFor = (user) => `users/${crypto.createHash('sha256').update(user.sub).digest('hex')}.json`;
+// users/<hash>.json is the working lab (autosaved); users/<hash>/labs/<name>.json are the labs
+// the user saved by name, each overwritten by the next save of the same name.
+const userKey = (user) => crypto.createHash('sha256').update(user.sub).digest('hex');
+const workingObject = (user) => `users/${userKey(user)}.json`;
+const labPrefix = (user) => `users/${userKey(user)}/labs/`;
+
+// Lab names become object names: letters, digits, dot, dash and underscore only.
+const slug = (name) => String(name || '').trim().replace(/[^\w.-]+/g, '-').replace(/^[-.]+|[-.]+$/g, '').slice(0, 80);
 
 let token = { at: 0, value: '' };
 
@@ -93,29 +100,48 @@ async function accessToken() {
   return token.value;
 }
 
-async function load(user) {
-  const name = objectFor(user);
-  if (!BUCKET) {
-    const file = path.join(DATA, path.basename(name));
-    return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
-  }
+const localPath = (name) => path.join(DATA, ...name.split('/'));
+
+async function getObject(name) {
+  if (!BUCKET) return fs.existsSync(localPath(name)) ? fs.readFileSync(localPath(name), 'utf8') : null;
   const res = await fetch(`https://storage.googleapis.com/storage/v1/b/${BUCKET}/o/${encodeURIComponent(name)}?alt=media`, { headers: { Authorization: `Bearer ${await accessToken()}` } });
   if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`load: HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`get ${name}: HTTP ${res.status}`);
   return res.text();
 }
 
-async function save(user, text) {
-  const name = objectFor(user);
+async function putObject(name, text) {
   if (!BUCKET) {
-    fs.mkdirSync(DATA, { recursive: true });
-    fs.writeFileSync(path.join(DATA, path.basename(name)), text);
+    fs.mkdirSync(path.dirname(localPath(name)), { recursive: true });
+    fs.writeFileSync(localPath(name), text);
     return;
   }
   const res = await fetch(`https://storage.googleapis.com/upload/storage/v1/b/${BUCKET}/o?uploadType=media&name=${encodeURIComponent(name)}`, {
     method: 'POST', body: text, headers: { Authorization: `Bearer ${await accessToken()}`, 'Content-Type': 'application/json' },
   });
-  if (!res.ok) throw new Error(`save: HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`put ${name}: HTTP ${res.status}`);
+}
+
+// Objects under a prefix, newest first: [{ name, updated, size }].
+async function listObjects(prefix) {
+  if (!BUCKET) {
+    const dir = localPath(prefix);
+    if (!fs.existsSync(dir)) return [];
+    return fs.readdirSync(dir).map((f) => {
+      const st = fs.statSync(path.join(dir, f));
+      return { name: prefix + f, updated: st.mtime.toISOString(), size: st.size };
+    }).sort((a, b) => b.updated.localeCompare(a.updated));
+  }
+  const out = [];
+  let page = '';
+  do {
+    const res = await fetch(`https://storage.googleapis.com/storage/v1/b/${BUCKET}/o?prefix=${encodeURIComponent(prefix)}&fields=nextPageToken,items(name,updated,size)${page ? `&pageToken=${encodeURIComponent(page)}` : ''}`, { headers: { Authorization: `Bearer ${await accessToken()}` } });
+    if (!res.ok) throw new Error(`list: HTTP ${res.status}`);
+    const body = await res.json();
+    (body.items || []).forEach((i) => out.push({ name: i.name, updated: i.updated, size: +i.size }));
+    page = body.nextPageToken || '';
+  } while (page);
+  return out.sort((a, b) => b.updated.localeCompare(a.updated));
 }
 
 // ---------- HTTP ----------
@@ -159,8 +185,22 @@ async function handle(req, res) {
   const user = await userOf(req);
   if (!user) return send(req, res, 401, { error: 'Not signed in through IAP.' });
   if (url.pathname === '/api/me' && req.method === 'GET') return send(req, res, 200, { email: user.email });
+  // Writes must come from the page itself, which sends this header; a plain cross-site form cannot.
+  if (req.method !== 'GET' && req.headers['x-patchlab'] !== '1') return send(req, res, 403, { error: 'forbidden' });
+  const readLab = async () => {
+    let doc;
+    try {
+      doc = JSON.parse(await readBody(req));
+    } catch (e) {
+      return null;
+    }
+    return doc && typeof doc === 'object' && doc.project && Array.isArray(doc.project.devices) ? doc.project : null;
+  };
+  const stamp = (project) => JSON.stringify({ project, savedAt: new Date().toISOString(), email: user.email });
+
+  // The working lab, saved as the user edits.
   if (url.pathname === '/api/state' && req.method === 'GET') {
-    const text = await load(user);
+    const text = await getObject(workingObject(user));
     // A new user has nothing saved yet; that is not an error.
     if (!text) {
       res.writeHead(204, SECURITY);
@@ -169,18 +209,33 @@ async function handle(req, res) {
     return send(req, res, 200, text);
   }
   if (url.pathname === '/api/state' && req.method === 'PUT') {
-    // Same-origin requests only: the page itself sends this header.
-    if (req.headers['x-patchlab'] !== '1') return send(req, res, 403, { error: 'forbidden' });
-    const text = await readBody(req);
-    let doc;
-    try {
-      doc = JSON.parse(text);
-    } catch (e) {
-      return send(req, res, 400, { error: 'Not JSON.' });
-    }
-    if (!doc || typeof doc !== 'object' || !doc.project || !Array.isArray(doc.project.devices)) return send(req, res, 400, { error: 'Not a PatchLab lab.' });
-    await save(user, JSON.stringify({ project: doc.project, savedAt: new Date().toISOString(), email: user.email }));
+    const project = await readLab();
+    if (!project) return send(req, res, 400, { error: 'Not a PatchLab lab.' });
+    await putObject(workingObject(user), stamp(project));
     return send(req, res, 200, { ok: true });
+  }
+
+  // Labs saved by name. Saving a name again replaces the earlier copy.
+  if (url.pathname === '/api/labs' && req.method === 'GET') {
+    const prefix = labPrefix(user);
+    const items = await listObjects(prefix);
+    return send(req, res, 200, { labs: items.map((i) => ({ id: i.name.slice(prefix.length).replace(/\.json$/, ''), savedAt: i.updated, size: i.size })) });
+  }
+  const m = /^\/api\/labs\/([^/]+)$/.exec(url.pathname);
+  if (m) {
+    const id = slug(decodeURIComponent(m[1]));
+    if (!id) return send(req, res, 400, { error: 'Give the lab a name.' });
+    const name = `${labPrefix(user)}${id}.json`;
+    if (req.method === 'GET') {
+      const text = await getObject(name);
+      return text ? send(req, res, 200, text) : send(req, res, 404, { error: 'No saved lab by that name.' });
+    }
+    if (req.method === 'PUT') {
+      const project = await readLab();
+      if (!project) return send(req, res, 400, { error: 'Not a PatchLab lab.' });
+      await putObject(name, stamp(project));
+      return send(req, res, 200, { ok: true, id });
+    }
   }
   return send(req, res, 404, { error: 'not found' });
 }

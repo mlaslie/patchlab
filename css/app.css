@@ -76,6 +76,9 @@ button { cursor: pointer; }
 .menu button { text-align: left; border: 0; background: transparent; padding: 6px 8px; border-radius: 4px; display: grid; gap: 1px; }
 .menu button:hover { background: var(--accent-soft); }
 .menu small { color: var(--muted); font-size: 12.500px; }
+.menu .eyebrow { padding: 4px 8px 2px; }
+.menu-note { margin: 0; padding: 2px 8px 6px; color: var(--muted); font-size: 12.500px; }
+#menu-saved:not([hidden]) { border-bottom: 1px solid var(--line); padding-bottom: 4px; margin-bottom: 2px; display: grid; gap: 2px; max-height: 240px; overflow-y: auto; }
 .dlg { border: 1px solid var(--line-strong); border-radius: 8px; padding: 18px; width: min(380px, calc(100vw - 32px)); background: var(--surface); color: var(--ink); box-shadow: 0 12px 32px rgb(0 0 0 / .25); }
 .dlg::backdrop { background: rgb(0 0 0 / .35); }
 .dlg form { display: grid; gap: 10px; }

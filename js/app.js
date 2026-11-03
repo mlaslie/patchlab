@@ -383,8 +383,40 @@
   const UNTITLED = M.newProject().name;
   const fileNameFor = (name) => `${name.trim().replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '-') || 'lab'}.json`;
 
+  // On Cloud Run a save also keeps a copy in the user's account, named after the lab, which the
+  // next save of the same lab replaces. The file still downloads as before.
   function writeLabFile() {
     App.download(fileNameFor(App.project.name), JSON.stringify(App.project, null, 2), 'application/json');
+    if (!remote.user) return;
+    const id = fileNameFor(App.project.name).replace(/\.json$/, '');
+    fetch(`/api/labs/${encodeURIComponent(id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-PatchLab': '1' }, body: JSON.stringify({ project: App.project }) })
+      .then((r) => App.toast(r.ok ? `Saved "${App.project.name}" to your account and downloaded it.` : `Downloaded, but saving to your account failed (${r.status}).`))
+      .catch(() => App.toast('Downloaded, but saving to your account failed: offline.'));
+  }
+
+  // The "Your saved labs" part of the Labs menu, filled each time the menu opens.
+  function fillSavedLabs() {
+    const box = document.getElementById('menu-saved');
+    if (!box) return;
+    if (!remote.user) {
+      box.hidden = true;
+      return;
+    }
+    box.hidden = false;
+    box.innerHTML = '<div class="eyebrow">Your saved labs</div><p class="menu-note">Loading…</p>';
+    fetch('/api/labs', { headers: { 'X-PatchLab': '1' } }).then((r) => (r.ok ? r.json() : Promise.reject(r.status))).then(({ labs }) => {
+      const when = (iso) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+      const esc = (x) => String(x).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      box.innerHTML = `<div class="eyebrow">Your saved labs</div>${labs.length
+        ? labs.map((l) => `<button type="button" data-saved="${esc(l.id)}"><span>${esc(l.id.replace(/-/g, ' '))}</span><small>Saved ${esc(when(l.savedAt))}</small></button>`).join('')
+        : '<p class="menu-note">None yet. Save lab as a file keeps a copy here too.</p>'}`;
+    }).catch(() => { box.innerHTML = '<div class="eyebrow">Your saved labs</div><p class="menu-note">Could not load your saved labs.</p>'; });
+  }
+
+  function openSavedLab(id) {
+    fetch(`/api/labs/${encodeURIComponent(id)}`, { headers: { 'X-PatchLab': '1' } }).then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((doc) => App.loadProject(doc.project, `Opened "${doc.project.name}" from your account. Undo brings your previous lab back.`))
+      .catch(() => App.toast('Could not open that saved lab.'));
   }
 
   // A lab still called "Untitled lab" gets a name before it is saved, so files are not all
@@ -420,16 +452,17 @@
       menu.hidden = true;
       btn.setAttribute('aria-expanded', 'false');
     };
-    menu.innerHTML = `${PL.samples.map((s) => `<button type="button" data-sample="${s.id}"><span>${s.title}</span><small>${s.blurb}</small></button>`).join('')}
+    menu.innerHTML = `<div id="menu-saved" hidden></div>${PL.samples.map((s) => `<button type="button" data-sample="${s.id}"><span>${s.title}</span><small>${s.blurb}</small></button>`).join('')}
       <hr>
       <button type="button" data-do="new"><span>New blank lab</span></button>
       <button type="button" data-do="import"><span>Open a saved lab</span><small>Load a .json file you exported</small></button>
-      <button type="button" data-do="export"><span>Save lab as a file</span></button>
+      <button type="button" data-do="export"><span>Save lab as a file</span><small id="save-hint">Downloads a .json file</small></button>
       <button type="button" data-do="copyjson"><span>Copy lab data</span><small>Paste into a .json file where downloads are blocked</small></button>`;
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       menu.hidden = !menu.hidden;
       btn.setAttribute('aria-expanded', String(!menu.hidden));
+      if (!menu.hidden) fillSavedLabs();
     });
     document.addEventListener('pointerdown', (e) => {
       if (!menu.hidden && !menu.contains(e.target) && e.target !== btn) close();
@@ -438,6 +471,7 @@
       const b = e.target.closest('button');
       if (!b) return;
       close();
+      if (b.dataset.saved) return openSavedLab(b.dataset.saved);
       if (b.dataset.sample) {
         const s = PL.samples.find((x) => x.id === b.dataset.sample);
         return App.loadProject(s.build(), `Loaded ${s.title}. Undo brings your previous lab back.`);
@@ -557,6 +591,7 @@
     // Send any unsaved change before the tab goes away.
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && remote.pending) pushRemote(remote.pending, true); });
     showWho();
+    if (remote.user) document.getElementById('save-hint').textContent = 'Downloads a .json file and keeps a copy in your account';
     window.PatchLab = App;
   }
 

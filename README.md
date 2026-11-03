@@ -70,6 +70,9 @@ The container runs a small Node.js server (`server/server.js`, no dependencies) 
 Identity-Aware Proxy (IAP), so only the Google accounts you allow can open it. The server checks
 the identity IAP signs into every request and keeps **each user's lab separate** in a Cloud
 Storage bucket: everyone signs in and gets their own lab, which follows them to any computer.
+**Labs → Save lab as a file** still downloads the `.json` file, and on Cloud Run it also keeps a
+copy in your account under the lab's name; saving the same lab again replaces that copy. Saved
+labs appear at the top of the **Labs** menu to reopen.
 It scales to zero when idle and never runs more than one instance, to keep the cost near nothing.
 
 You need the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install), Node.js and a Google

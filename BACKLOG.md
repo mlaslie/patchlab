@@ -49,3 +49,5 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` done.
 
 - [x] **Per-user labs behind IAP.** The server verifies the IAP-signed identity and keeps each
   user's lab in Cloud Storage.
+- [x] **Saved labs in your account.** On Cloud Run, Save lab as a file also stores the lab in
+  Cloud Storage under its name, overwriting the previous save; the Labs menu lists them.
