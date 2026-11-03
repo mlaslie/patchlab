@@ -13,7 +13,7 @@ It covers what I'd expect from a CCNA-level lab:
 - port security and DHCP snooping
 - IPv6 with SLAAC and OSPFv3
 
-It also has a subnet/VLSM calculator, a step-by-step build guide, a printable answer sheet, config
+It also has IPv4 and IPv6 subnet calculators, a VLSM planner, a step-by-step build guide, a printable answer sheet, config
 import from `show running-config`, and export to Cisco Modeling Labs.
 
 It's a single page of plain HTML, CSS and JavaScript, with no framework, no backend and nothing
@@ -128,8 +128,8 @@ change, run `npm run build` and the `gcloud run deploy` line again.
    **Show** narrows it to one feature, such as DHCP, EtherChannel, ACLs, NAT or IPv6.
    **Verify** lists problems, shows a ping matrix and traces any test traffic (IPv4 or IPv6)
    hop by hop, animating the packet on the canvas with the route, ACL or NAT step at each hop.
-12. **Tools** has a subnet calculator and VLSM planner (which can write subnets into the VLAN
-   list), the step-by-step build guide with a check after each step, and exports: SVG and
+12. **Tools** has an IPv4 subnet calculator and VLSM planner (which can write subnets into the
+   VLAN list), an IPv6 prefix calculator that splits a block into numbered subnets, the step-by-step build guide with a check after each step, and exports: SVG and
    PNG drawings, a printable answer sheet, and a Cisco Modeling Labs topology file.
 
 | Key | Action |
@@ -180,7 +180,7 @@ js/configgen.js   IOS generator
 js/stp.js         Rapid PVST+ root election and port roles
 js/simulate.js    L2 domains, routing convergence, HSRP, NAT, packet walks
 js/ipv6.js        IPv6 addressing, SLAAC, OSPFv3 and ping
-js/subnet.js      subnet calculator and VLSM planner
+js/subnet.js      IPv4 and IPv6 subnet calculators, VLSM planner
 js/export.js      SVG drawing and Cisco Modeling Labs export
 js/guide.js       build guide and answer sheet
 js/importer.js    show running-config import

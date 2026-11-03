@@ -31,6 +31,8 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` done.
 
 - [x] **Subnet calculator and VLSM planner.** Network/mask maths, then host counts per segment to
   a VLSM plan that can be applied to the VLAN list.
+- [x] **IPv6 subnet calculator.** Prefix facts (expanded form, last address, address and /64
+  counts, address type) and splitting a block into numbered subnets of any length.
 - [x] **Packet animation.** Play a test packet hop by hop on the canvas, showing the route or ACL
   that decided each step.
 - [x] **Topology export.** Canvas to SVG and PNG; lab to a Cisco Modeling Labs (CML) YAML file with

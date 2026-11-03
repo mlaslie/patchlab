@@ -1410,6 +1410,38 @@
           ${plan.rows && plan.rows.length && !plan.error ? `<div class="btn-row">${btn('Apply to VLANs', apply, 'primary')}</div><p class="note">Segments are matched to VLANs by name; new names become new VLANs.</p>` : ''}</div>`;
     }
 
+    function subnet6Tool() {
+      const t = App.ui.tools.v6;
+      const quiet = (fn) => (v) => { fn(v); App.ui.skipCommit = true; };
+      const c = PL.subnet.calc6(t.prefix);
+      const facts = c.error ? `<p class="note">${esc(c.error)}</p>` : `<dl class="fact">
+        <dt>Prefix</dt><dd>${esc(c.network)}/${c.len}</dd><dt>Written out</dt><dd class="mono">${esc(c.networkLong)}</dd>
+        <dt>Last address</dt><dd>${esc(c.last)}</dd><dt>Addresses</dt><dd>${esc(c.addresses)}</dd>
+        ${c.sixtyFours ? `<dt>/64 subnets</dt><dd>${esc(c.sixtyFours)}</dd>` : ''}<dt>Type</dt><dd>${esc(c.type)}</dd></dl>
+        ${c.isNetwork ? '' : `<p class="note">${esc(c.addr)} is a host address inside this prefix.</p>`}
+        ${c.nibble ? '' : '<p class="note">This prefix length is not a multiple of 4, so the boundary falls inside a hex digit. Work that digit out in binary.</p>'}`;
+      const sp = c.error ? null : PL.subnet.split6(`${c.network}/${c.len}`, t.newLen, t.from, 8);
+      const step = (delta) => () => {
+        const next = BigInt(sp.from) + BigInt(delta);
+        t.from = (next < 0n ? 0n : next).toString();
+        App.renderPanel();
+      };
+      const lens = [48, 52, 56, 60, 64, 112, 126, 127, 128].filter((n) => !c.error && n > c.len);
+      const splitHtml = !sp ? '' : sp.error ? `<p class="note">${esc(sp.error)}</p>` : `
+        <p class="note">${esc(sp.block)} holds ${esc(sp.totalText)} subnets of /${t.newLen}, using ${sp.bits} subnet bit${sp.bits === 1 ? '' : 's'}.
+          ${sp.nibble ? 'The subnet ID is the hex digits that change between rows.' : 'The subnet bits do not fill whole hex digits, so the changing digit steps by more than 1.'}</p>
+        <table class="nbrs"><thead><tr><th>#</th><th>Subnet and last address</th></tr></thead><tbody>${sp.rows.map((r) => `<tr>
+          <td class="mono">${esc(r.index)}</td><td class="mono">${esc(r.net)}/${r.len}<div class="sub wrap">to ${esc(r.last)}</div></td></tr>`).join('')}</tbody></table>
+        <div class="btn-row">${btn('Previous', step(-8))}${btn('Next', step(8))}${btn('Last', () => { t.from = (BigInt(sp.total) - 8n < 0n ? 0n : BigInt(sp.total) - 8n).toString(); App.renderPanel(); })}</div>`;
+      return `<div class="sect"><div class="sect-head"><h3>IPv6 prefix calculator</h3></div>
+          ${field('Prefix or address', input(t.prefix, quiet((v) => { t.prefix = v.trim(); t.from = '0'; }), { mono: true, ph: '2001:db8:acad::/48', label: 'IPv6 prefix' }))}${facts}</div>
+        ${c.error ? '' : `<div class="sect"><div class="sect-head"><h3>Split into subnets</h3></div>
+          <div class="grid">${field('New prefix length', select(t.newLen, (lens.includes(+t.newLen) ? lens : [...lens, +t.newLen].filter((n) => n > c.len && n <= 128).sort((a, b) => a - b)).map((n) => [n, `/${n}${n === 64 ? ' (LAN)' : n === 127 ? ' (point-to-point)' : ''}`]), quiet((v) => { t.newLen = +v; t.from = '0'; }), 'New prefix length'))}
+          ${field('Jump to subnet #', input(t.from, quiet((v) => { t.from = /^\d+$/.test(v.trim()) ? v.trim() : '0'; }), { mono: true, label: 'Subnet number' }))}</div>
+          ${splitHtml}
+          <p class="note">LANs use /64 so SLAAC works. Sites usually get a /48 (65,536 LANs) or a /56 (256 LANs). Links between routers often use /64 or /127.</p></div>`}`;
+    }
+
     function guideTool() {
       const p = App.project;
       if (!p.devices.length) return '<p class="note">Add devices and the build order appears here.</p>';
@@ -1444,9 +1476,9 @@
     }
 
     function toolsView() {
-      const list = [['subnet', 'Subnets'], ['guide', 'Build guide'], ['export', 'Export']];
+      const list = [['subnet', 'IPv4 subnets'], ['subnet6', 'IPv6 subnets'], ['guide', 'Build guide'], ['export', 'Export']];
       const cur = App.ui.toolTab;
-      const body = cur === 'guide' ? guideTool() : cur === 'export' ? exportTool() : subnetTool();
+      const body = cur === 'guide' ? guideTool() : cur === 'export' ? exportTool() : cur === 'subnet6' ? subnet6Tool() : subnetTool();
       return subtabs('toolTab', list, cur) + body;
     }
 

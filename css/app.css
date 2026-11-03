@@ -334,3 +334,4 @@ pre.cli .typed { font-weight: 600; }
 .step-check ul { margin: 4px 0 0; padding-left: 18px; font-family: var(--font-mono); font-size: 12px; color: var(--ink); }
 .hops .sub.nat { color: var(--info); }
 .route .code.c-blk { background: var(--bad-soft); color: var(--bad); }
+.sub.wrap { overflow-wrap: anywhere; }

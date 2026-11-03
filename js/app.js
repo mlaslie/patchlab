@@ -24,6 +24,7 @@
       toolTab: 'subnet',
       tools: {
         ip: '192.168.10.77', mask: '/26', base: '192.168.1.0/24', guideDev: '',
+        v6: { prefix: '2001:db8:acad::/48', newLen: 64, from: '0' },
         rows: [{ name: 'STAFF', hosts: 50 }, { name: 'STUDENTS', hosts: 100 }, { name: 'SERVERS', hosts: 12 }, { name: 'R1-R2', hosts: 2 }],
       },
     },

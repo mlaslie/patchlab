@@ -887,6 +887,31 @@ test('CML export and answer sheet', () => {
   assert(html.includes('<h2>Addressing</h2>') && html.includes('192.168.10.1') && html.includes('hostname R1'));
 });
 
+test('IPv6 subnet calculator and splitter', () => {
+  const c = SUB.calc6('2001:db8:acad:12::1/48');
+  assert.equal(c.network, '2001:db8:acad::');
+  assert.equal(c.networkLong, '2001:0db8:acad:0000:0000:0000:0000:0000');
+  assert.equal(c.last, '2001:db8:acad:ffff:ffff:ffff:ffff:ffff');
+  assert.equal(c.sixtyFours, '65,536');
+  assert(/^Documentation/.test(c.type));
+  assert(!c.isNetwork);
+  assert.equal(SUB.calc6('fe80::1').len, 64);
+  assert(/Link-local/.test(SUB.calc6('fe80::1').type));
+  assert(/Unique local/.test(SUB.calc6('fd00:1::/48').type));
+  assert(/Global unicast/.test(SUB.calc6('2600::/32').type));
+  assert(SUB.calc6('2001:db8::g/64').error);
+  const s = SUB.split6('2001:db8:acad::/48', 64, 0, 3);
+  assert.equal(s.total, '65536');
+  assert.deepEqual(s.rows.map((r) => r.net), ['2001:db8:acad::', '2001:db8:acad:1::', '2001:db8:acad:2::']);
+  assert.equal(SUB.split6('2001:db8:acad::/48', 64, 255, 1).rows[0].net, '2001:db8:acad:ff::');
+  assert.equal(SUB.split6('2001:db8:acad::/48', 64, 99999, 1).rows[0].net, '2001:db8:acad:ffff::', 'clamped to the last subnet');
+  const odd = SUB.split6('2001:db8::/32', 34, 0, 4);
+  assert.deepEqual(odd.rows.map((r) => r.net), ['2001:db8::', '2001:db8:4000::', '2001:db8:8000::', '2001:db8:c000::']);
+  assert.equal(odd.nibble, false);
+  assert.equal(odd.rows[0].last, '2001:db8:3fff:ffff:ffff:ffff:ffff:ffff');
+  assert(SUB.split6('2001:db8::/64', 48).error);
+});
+
 tests.forEach(([name, fn]) => {
   try {
     fn();
