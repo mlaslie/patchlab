@@ -200,8 +200,15 @@ app saves only in that browser.
    `| include/exclude/begin/section/count`. `show running-config` prints exactly what was typed, in
    IOS layout; `copy run start`, `show startup-config`, `erase startup-config` and `reload` behave
    as on a real device. Also `show version`, `clock`, `history`, `interfaces status`,
-   `interfaces description`, `cdp neighbors`, `mac address-table`, `ip protocols`,
-   `ip route ospf|static|connected`, and `traceroute`; PCs take `ipconfig`, `ping` and `tracert`. Router interfaces and SVIs stay shut until
+   `interfaces description`, `interfaces <port>`, `interfaces <port> switchport`,
+   `ip interface [<port>]`, `cdp neighbors`, `ip arp`, `port-security [interface|address]`,
+   `etherchannel summary`, `spanning-tree summary`, `vlan id`, `ip ospf interface [brief]`,
+   `ip bgp [summary]`, `ip nat translations`, `ip dhcp pool`, `ip dhcp snooping`,
+   `ipv6 interface brief`, `ipv6 ospf neighbor`, `ip protocols`, `ip route ospf|static|connected`,
+   `ip route <address>` (the longest match), `clear mac address-table dynamic`, and `traceroute`.
+   `show mac address-table` learns MACs across trunks and through other switches (never on a port
+   spanning tree blocks) and takes `vlan`, `interface`, `address`, `dynamic`, `static` and `count`.
+   PCs take `ipconfig [/all]`, `arp -a`, `ping` and `tracert`. Router interfaces and SVIs stay shut until
    `no shutdown`, and an access port in a VLAN the switch never created stays inactive, as on real
    gear. The score compares every host pair with the designed lab: what should work, and what
    should stay blocked. The lab brief lists each device's cables and addresses. What students

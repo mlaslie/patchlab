@@ -44,7 +44,7 @@
             <div class="btn-row"><button type="button" class="btn small" data-c="clear">Clear screen</button><button type="button" class="btn small" data-c="reset">Reset device</button><button type="button" class="btn small" data-c="solution">Show solution</button></div></div>
           <div class="term-box" id="cli-box"><pre id="cli-out" class="term" tabindex="-1"></pre>
           <form id="cli-form" class="term-in"><label for="cli-in" id="cli-prompt" class="prompt"></label><input id="cli-in" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Command"></form></div>
-          <p class="note">Type IOS commands as on the real console. Abbreviations work (conf t, int g0/1, no shut, wr), Tab completes commands and interface names (int gig → GigabitEthernet0/), ? lists what can come next (sh ?, sw?), ↑/↓ recall history, Ctrl+Z ends configuration, Ctrl+A/E/W/U/K edit the line as on IOS. A second Tab lists what fits. PCs take ipconfig and ping.</p>
+          <p class="note">Type IOS commands as on the real console. Abbreviations work (conf t, int g0/1, no shut, wr), Tab completes commands and interface names (int gig → GigabitEthernet0/), ? lists what can come next (sh ?, sw?), ↑/↓ recall history, Ctrl+Z ends configuration, Ctrl+A/E/W/U/K edit the line as on IOS. A second Tab lists what fits. PCs take ipconfig, arp -a, ping and tracert.</p>
         </section>
         <aside class="cli-right"><div class="cli-card" id="cli-score"></div><div class="cli-card" id="cli-ask"></div></aside>
       </div>

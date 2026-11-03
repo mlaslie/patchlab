@@ -999,6 +999,69 @@ test('CLI lab: show run is what was typed, interface range, startup-config and r
   assert.deepEqual(P.options('config', 'interface GigabitEthernet0/', named(t, 'SW1')), ['GigabitEthernet0/1', 'GigabitEthernet0/2']);
 });
 
+// Types every device's designed configuration into the CLI lab, and sets each PC's address.
+function typeAll(t, practice) {
+  t.devices.forEach((d) => {
+    if (M.isHost(d)) {
+      const c = d.ports.Ethernet0 || {};
+      if (d.ipMode === 'dhcp') typeInto(t, practice, d.name, 'ipconfig /dhcp');
+      else if (c.ip) typeInto(t, practice, d.name, `ipconfig ${c.ip} ${c.mask} ${d.gateway}`);
+      return;
+    }
+    const lines = C.generate(t, d, { paste: true, notes: false }).split('\n').filter((l) => l && !/^(!|end$|enable$|configure terminal)/.test(l.trim()));
+    typeInto(t, practice, d.name, `en\nconf t\n${lines.join('\n')}`);
+  });
+}
+
+test('CLI lab: the MAC table learns across trunks, with filters, and CCNA show commands', () => {
+  assert.equal(P.expand('priv', 'sh mac add dyn vl 10').line, 'show mac address-table dynamic vlan 10');
+  assert.equal(P.expand('priv', 'sh int vlan 1').line, 'show interfaces Vlan1');
+  assert.equal(P.expand('priv', 'sh int fa0/1 sw').line, 'show interfaces FastEthernet0/1 switchport');
+  const edge = sample('edge');
+  const pe = { devices: {}, hosts: {} };
+  typeAll(edge, pe);
+  const acc = typeInto(edge, pe, 'ACC1', 'en\nsh mac add dyn\nsh span vl 10\nsh mac add dyn vl 10\nsh mac add count\nsh mac add vlan 30');
+  const rows = acc[1].out.split('\n').filter((l) => /DYNAMIC/.test(l));
+  const blocked = acc[2].out.split('\n').find((l) => / BLK /.test(l)).split(' ')[0];
+  const root = acc[2].out.split('\n').find((l) => /^\S+\s+Root FWD/.test(l)).split(' ')[0];
+  assert(rows.length >= 4, acc[1].out);
+  assert(rows.some((l) => l.endsWith(root)), 'MACs behind the distribution switches are learned on the root port');
+  assert(!rows.some((l) => l.endsWith(blocked)), 'nothing is learned on the port spanning tree blocks');
+  assert(acc[3].out.split('\n').filter((l) => /DYNAMIC/.test(l)).every((l) => /^ {2}10 /.test(l)));
+  has(acc[4].out, 'Mac Entries for Vlan 10:');
+  has(acc[5].out, 'Total Mac Addresses for this criterion: 0');
+  const mac = rows[0].trim().split(/\s+/)[1];
+  assert.equal(typeInto(edge, pe, 'ACC1', `en\nsh mac address-table address ${mac}`)[1].out.split('\n').filter((l) => /DYNAMIC/.test(l)).length, 1);
+  // Sticky port security turns the learned address static.
+  const ps = typeInto(edge, pe, 'ACC1', 'en\nconf t\nint fa0/1\nsw port-sec\nsw port-sec mac sticky\nend\nsh port-sec int fa0/1\nsh mac add int fa0/1');
+  has(ps[6].out, 'Port Status                : Secure-up');
+  assert(/STATIC +Fa0\/1$/m.test(ps[7].out), ps[7].out);
+  // The active HSRP router answers ARP for the virtual IP with the group's virtual MAC.
+  assert(/^Internet {2}\S+ +- {3}0000\.0c07\.ac/m.test(typeInto(edge, pe, 'DIST1', 'en\nsh ip arp')[1].out));
+  const pc = typeInto(edge, pe, 'PC1', 'arp -a\nipconfig /all');
+  assert(/Interface: \S+ --- 0x2/.test(pc[0].out) && /00-00-0c-07-ac/.test(pc[0].out), pc[0].out);
+  assert(/Physical Address\.+: [0-9A-F]{2}(-[0-9A-F]{2}){5}/.test(pc[1].out), pc[1].out);
+
+  const campus = sample('campus');
+  const pc2 = { devices: {}, hosts: {} };
+  typeAll(campus, pc2);
+  const core = typeInto(campus, pc2, 'CORE1', 'en\nsh etherchannel summary\nsh ip ospf int br\nsh ip int vlan 30\nsh ip route 10.10.10.5\nsh ip route 8.8.8.8\nsh int g1/0/1\nsh int g1/0/2 switchport');
+  assert(/^1 +Po1\(SU\) +LACP +Gi1\/0\/2\(P\) +Gi1\/0\/3\(P\)$/m.test(core[1].out), core[1].out);
+  assert(/^Gi1\/0\/1 +1 +0 +10\.255\.0\.2\/30 +1 +DR +1\/1$/m.test(core[2].out), core[2].out);
+  has(core[3].out, '  Outgoing access list is PROTECT_SERVERS');
+  has(core[4].out, 'Routing entry for 10.10.10.0/24');
+  assert.equal(core[5].out, '% Network not in table');
+  has(typeInto(campus, pc2, 'CORE1', 'en\nsh ip route 1.1.1.1')[1].out, '  Known via "ospf 1", distance 110, metric 2');
+  has(core[6].out, 'GigabitEthernet1/0/1 is up, line protocol is up');
+  has(core[6].out, '  Internet address is 10.255.0.2/30');
+  has(core[7].out, 'Operational Mode: trunk');
+  const sw = typeInto(campus, pc2, 'SW1', 'en\nsh int fa0/1 sw\nsh vlan id 10\nsh vlan id 77\nclear mac add dyn');
+  has(sw[1].out, 'Access Mode VLAN: 10 (STUDENTS)');
+  assert(/^10 +STUDENTS +active +Fa0\/1$/m.test(sw[2].out), sw[2].out);
+  has(sw[3].out, 'VLAN id 77 not found in current VLAN database');
+  assert.equal(sw[4].out, '');
+});
+
 test('CLI lab: router ports start shut, VLANs must exist, scoring and exact fixes', () => {
   const target = sample('stick');
   const practice = { devices: {}, hosts: {} };
