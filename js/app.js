@@ -504,6 +504,7 @@
     const list = box.querySelector('.menu-list');
     list.innerHTML = '<p class="menu-note">Loading…</p>';
     listYourLabs().then((labs) => {
+      box.querySelector('.menu-count').textContent = labs.length;
       const when = (iso) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
       const open = labId(App.project.name || '');
       list.innerHTML = labs.length ? labs.map((l) => `<div class="menu-row" data-row="${escHtml(l.id)}">
@@ -543,8 +544,10 @@
       menu.hidden = true;
       btn.setAttribute('aria-expanded', 'false');
     };
-    menu.innerHTML = `<div class="menu-sect" id="menu-yours" hidden><div class="eyebrow">Your labs</div><div class="menu-list"></div></div>
-      <div class="menu-sect"><div class="eyebrow">Example labs</div>${PL.samples.map((s) => `<button type="button" data-sample="${s.id}"><span>${s.title}</span><small>${s.blurb}</small></button>`).join('')}</div>
+    // Both lists start collapsed; their headings open and close them.
+    const head = (key, label, count) => `<button type="button" class="menu-head" data-toggle="${key}" aria-expanded="false" aria-controls="menu-list-${key}"><i class="chev" aria-hidden="true"></i>${label}<small class="menu-count">${count}</small></button>`;
+    menu.innerHTML = `<div class="menu-sect" id="menu-yours" hidden>${head('yours', 'Your labs', '')}<div class="menu-list" id="menu-list-yours" hidden></div></div>
+      <div class="menu-sect">${head('examples', 'Example labs', PL.samples.length)}<div class="menu-list" id="menu-list-examples" hidden>${PL.samples.map((s) => `<button type="button" data-sample="${s.id}"><span>${s.title}</span><small>${s.blurb}</small></button>`).join('')}</div></div>
       <hr>
       <button type="button" data-do="new"><span>New lab…</span><small id="new-hint">Starts empty, with a name</small></button>
       <button type="button" data-do="import"><span>Open a lab file</span><small>Load a .json file you saved</small></button>
@@ -566,6 +569,12 @@
     menu.addEventListener('click', (e) => {
       const b = e.target.closest('button');
       if (!b) return;
+      if (b.dataset.toggle) {
+        const open = b.getAttribute('aria-expanded') !== 'true';
+        b.setAttribute('aria-expanded', String(open));
+        document.getElementById(`menu-list-${b.dataset.toggle}`).hidden = !open;
+        return;
+      }
       // Deleting asks first, inside the menu, so the menu stays open.
       if (b.dataset.del) return confirmDelete(b.closest('.menu-row'), b.dataset.del);
       if ('cancel' in b.dataset) return fillYourLabs();

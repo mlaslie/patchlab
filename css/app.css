@@ -81,7 +81,13 @@ button { cursor: pointer; }
 .menu { max-height: calc(100vh - 70px); overflow-y: auto; }
 .menu-sect { display: grid; gap: 2px; }
 .menu-sect + .menu-sect { border-top: 1px solid var(--line); padding-top: 4px; margin-top: 2px; }
-#menu-yours .menu-list { display: grid; gap: 2px; max-height: 260px; overflow-y: auto; }
+#menu-yours .menu-list { max-height: 260px; overflow-y: auto; }
+.menu-list:not([hidden]) { display: grid; gap: 2px; padding-bottom: 2px; }
+.menu .menu-head { display: flex; align-items: center; gap: 6px; font: 600 13px/1.1 var(--font-label); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 7px 8px; }
+.menu .menu-head:hover { color: var(--ink); }
+.menu-head .chev { width: 7px; height: 7px; border-right: 1.800px solid currentColor; border-bottom: 1.800px solid currentColor; transform: rotate(-45deg); transition: transform .12s; flex: none; margin-right: 2px; }
+.menu-head[aria-expanded="true"] .chev { transform: rotate(45deg); }
+.menu-count { margin-left: auto; font: 500 12px var(--font-ui); letter-spacing: 0; text-transform: none; color: var(--muted); }
 .menu-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px; }
 .menu-row .x { align-self: center; width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; color: var(--muted); font-size: 18px; padding: 0; }
 .menu-row .x:hover { background: var(--bad-soft); color: var(--bad); }

@@ -70,8 +70,8 @@ The container runs a small Node.js server (`server/server.js`, no dependencies) 
 Identity-Aware Proxy (IAP), so only the Google accounts you allow can open it. The server checks
 the identity IAP signs into every request and keeps **each user's lab separate** in a Cloud
 Storage bucket: everyone signs in and gets their own lab, which follows them to any computer.
-The **Labs** menu has two lists: **Your labs** (on Cloud Run) and **Example labs** (the worked
-labs that come with PatchLab). **New lab…** asks for a name and, on Cloud Run, adds the empty lab to
+The **Labs** menu has two lists, collapsed until you click their headings: **Your labs** (on Cloud
+Run) and **Example labs** (the worked labs that come with PatchLab). **New lab…** asks for a name and, on Cloud Run, adds the empty lab to
 Your labs straight away; a name you already use is refused rather than overwriting that lab.
 **Save lab as a file** still downloads the `.json` file, and on Cloud Run also stores the lab in
 Your labs under its name, replacing the earlier copy. The × beside a lab in Your labs deletes it
