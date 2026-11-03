@@ -974,6 +974,31 @@ test('CLI lab: common shortcuts, Tab completion of commands and interfaces, and 
   assert(P.exec(ctx, sw.id, 'int ?').out.includes('  GigabitEthernet'));
 });
 
+test('CLI lab: show run is what was typed, interface range, startup-config and reload', () => {
+  const t = sample('stick');
+  const practice = { devices: {}, hosts: {} };
+  const out = typeInto(t, practice, 'SW1', 'en\nconf t\nhostname S1\nvlan 10\nint ra fa0/1 - 2, g0/1\nsw mo acc\nsw acc vl 10\nend\nsh run\ncopy run start\nconf t\nno hostname S1\ndo sh run | i hostname\nend\nreload\n\nsh run | i hostname\nsh start | c interface');
+  assert.equal(out[4].prompt, 'S1(config-vlan)#');
+  assert.equal(out[5].prompt, 'S1(config-if-range)#');
+  const run = out[8].out;
+  has(run, 'hostname S1');
+  assert(!/description|banner| password /.test(run), 'nothing the student did not type');
+  ['FastEthernet0/1', 'FastEthernet0/2', 'GigabitEthernet0/1'].forEach((n) => assert(run.includes(`interface ${n}\n switchport mode access\n switchport access vlan 10\n!`), n));
+  assert(run.includes('interface FastEthernet0/3\n!'), 'untouched ports are listed with nothing under them');
+  assert(run.includes('interface Vlan1\n no ip address\n shutdown'));
+  has(out[12].out, 'hostname Switch');
+  assert.equal(out[14].prompt, 'Switch#');
+  assert(/Proceed with reload\? \[confirm\]/.test(out[14].out));
+  assert.equal(out[15].prompt, '', 'the confirm line has no prompt');
+  has(out[16].out, 'hostname S1');
+  assert(/= 27$/.test(out[17].out), out[17].out);
+  // do reaches exec commands from any configuration mode.
+  const r = typeInto(t, practice, 'R1', 'en\nconf t\nint g0/0\nno shut\ndo sh run int g0/0\ndo wr');
+  assert.equal(r[4].out.split('\n').slice(3).join('\n'), '!\ninterface GigabitEthernet0/0\n no ip address\n duplex auto\n speed auto\nend');
+  assert(/\[OK\]/.test(r[5].out));
+  assert.deepEqual(P.options('config', 'interface GigabitEthernet0/', named(t, 'SW1')), ['GigabitEthernet0/1', 'GigabitEthernet0/2']);
+});
+
 test('CLI lab: router ports start shut, VLANs must exist, scoring and exact fixes', () => {
   const target = sample('stick');
   const practice = { devices: {}, hosts: {} };

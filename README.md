@@ -193,8 +193,15 @@ app saves only in that browser.
    PNG drawings, a printable answer sheet, and a Cisco Modeling Labs topology file.
 13. **CLI lab** (top bar) turns the designed lab into an exercise. Every device starts at
    factory defaults with only its cables, and each has a console: IOS modes, abbreviations
-   (`conf t`, `int g0/1`, `no shut`, `copy run start`), Tab completion of commands and interface names (`int gig` → `interface GigabitEthernet0/`), `?` help after any word, history, `show` commands, `| include`
-   and `ping`; PCs take `ipconfig` and `ping`. Router interfaces and SVIs stay shut until
+   (`conf t`, `int g0/1`, `no shut`, `copy run start`), Tab completion of commands and interface
+   names (`int gig` → `interface GigabitEthernet0/`, and a second Tab lists the ports), `?` help
+   after any word, `do` from any configuration mode, `interface range`, `default interface`,
+   history, IOS line-editing keys (Ctrl+A/E/B/F/D/K/U/W/P/N/C/Z, Esc+B/F), and
+   `| include/exclude/begin/section/count`. `show running-config` prints exactly what was typed, in
+   IOS layout; `copy run start`, `show startup-config`, `erase startup-config` and `reload` behave
+   as on a real device. Also `show version`, `clock`, `history`, `interfaces status`,
+   `interfaces description`, `cdp neighbors`, `mac address-table`, `ip protocols`,
+   `ip route ospf|static|connected`, and `traceroute`; PCs take `ipconfig`, `ping` and `tracert`. Router interfaces and SVIs stay shut until
    `no shutdown`, and an access port in a VLAN the switch never created stays inactive, as on real
    gear. The score compares every host pair with the designed lab: what should work, and what
    should stay blocked. The lab brief lists each device's cables and addresses. What students

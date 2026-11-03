@@ -15,9 +15,9 @@
 
   // What may come first in each mode, which is how IOS resolves "sh" to show or shutdown.
   const FIRST = {
-    user: ['enable', 'exit', 'ping', 'show', 'traceroute'],
-    priv: ['configure', 'copy', 'disable', 'end', 'exit', 'ping', 'show', 'write', 'traceroute'],
-    config: ['access-list', 'banner', 'do', 'enable', 'end', 'exit', 'hostname', 'interface', 'ip', 'ipv6', 'line', 'no', 'router', 'service', 'spanning-tree', 'username', 'vlan', 'crypto'],
+    user: ['enable', 'exit', 'logout', 'ping', 'show', 'terminal', 'traceroute'],
+    priv: ['clock', 'configure', 'copy', 'disable', 'end', 'erase', 'exit', 'logout', 'ping', 'reload', 'show', 'terminal', 'traceroute', 'write'],
+    config: ['access-list', 'banner', 'default', 'do', 'enable', 'end', 'exit', 'hostname', 'interface', 'ip', 'ipv6', 'line', 'no', 'router', 'service', 'spanning-tree', 'username', 'vlan', 'crypto'],
     'config-if': ['channel-group', 'description', 'do', 'encapsulation', 'end', 'exit', 'interface', 'ip', 'ipv6', 'no', 'shutdown', 'spanning-tree', 'standby', 'switchport', 'speed', 'duplex'],
     'config-subif': ['description', 'do', 'encapsulation', 'end', 'exit', 'interface', 'ip', 'ipv6', 'no', 'shutdown', 'standby'],
     'config-router': ['auto-summary', 'bgp', 'default-information', 'do', 'end', 'exit', 'neighbor', 'network', 'no', 'passive-interface', 'redistribute', 'router-id', 'version'],
@@ -32,11 +32,14 @@
   // The words allowed after a given phrase. Anything not listed is taken as typed (names,
   // numbers, addresses).
   const NEXT = {
-    configure: ['terminal'], write: ['memory'], copy: ['running-config', 'startup-config'],
-    show: ['access-lists', 'etherchannel', 'interfaces', 'ip', 'ipv6', 'running-config', 'spanning-tree', 'standby', 'startup-config', 'version', 'vlan'],
+    configure: ['terminal'], write: ['erase', 'memory', 'terminal'], copy: ['running-config', 'startup-config'], erase: ['startup-config'],
+    show: ['access-lists', 'cdp', 'clock', 'etherchannel', 'history', 'interfaces', 'ip', 'ipv6', 'mac', 'running-config', 'spanning-tree', 'standby', 'startup-config', 'version', 'vlan'],
+    'show cdp': ['neighbors'], 'show mac': ['address-table'], 'show running-config': ['interface'],
+    terminal: ['history', 'length', 'monitor', 'width'], 'terminal history': ['size'], default: ['interface'],
+    'config interface': ['range'], 'if interface': ['range'],
     'show ip': ['access-lists', 'bgp', 'dhcp', 'interface', 'nat', 'ospf', 'protocols', 'route'],
     'show ip interface': ['brief'], 'show ip ospf': ['neighbor', 'interface'], 'show ip dhcp': ['binding', 'pool', 'snooping'],
-    'show ip nat': ['translations'], 'show ip bgp': ['summary'], 'show vlan': ['brief'], 'show interfaces': ['trunk', 'status'],
+    'show ip nat': ['translations'], 'show ip bgp': ['summary'], 'show vlan': ['brief'], 'show interfaces': ['description', 'status', 'trunk'],
     'show etherchannel': ['summary'], 'show standby': ['brief'], 'show ipv6': ['interface', 'route', 'ospf'], 'show ipv6 interface': ['brief'],
     'show ipv6 ospf': ['neighbor'], 'show spanning-tree': ['vlan', 'summary'],
     'config ip': ['access-list', 'default-gateway', 'dhcp', 'domain-lookup', 'domain-name', 'http', 'nat', 'route', 'routing', 'ssh'],
@@ -95,10 +98,14 @@
   // Real IOS commands outside what PatchLab models: accepted as valid but not applied.
   const NOT_SIMULATED = /^(no )?(snmp-server|ntp|logging|cdp|clock|lldp|vtp|aaa|archive|errdisable|mls|power|boot|license|monitor|privilege|alias|key|track|object-group|class-map|policy-map|ip sla|ip ftp|ip tftp|ip scp|ip name-server|security|login|memory|vrf|udld|storm-control|speed|duplex|mdix|cdp|lldp|keepalive|bandwidth|delay|mtu|ip mtu|ip ospf|ip split-horizon|ip summary-address|ip rip|ip pim|ip igmp|ip verify|ip arp|arp|mac|exec-timeout)\b/i;
 
-  const IF_WORDS = new Set(['interface', 'interfaces', 'passive-interface', 'update-source']);
+  const IF_WORDS = new Set(['interface', 'interfaces', 'passive-interface', 'update-source', 'range']);
+
+  // Interface range mode takes the same commands as one interface.
+  const base = (mode) => (mode === 'config-if-range' ? 'config-if' : mode);
 
   // Expands IOS abbreviations: "conf t", "int g0/1", "sh ip int br", "no shut".
   function expand(mode, line) {
+    mode = base(mode);
     const words = line.trim().split(/\s+/).filter(Boolean);
     if (!words.length) return { line: '' };
     const out = [];
@@ -135,11 +142,37 @@
       else out.push(w);
     }
     // "interface g0/1" style names after the first word.
-    if (out[0] === 'interface' || (out[0] === 'no' && out[1] === 'interface')) {
-      const at = out[0] === 'no' ? 2 : 1;
-      if (out[at]) out.splice(at, out.length - at, IMP.ifName(out.slice(at).join('')));
+    if (out[0] === 'interface' || (['no', 'default'].includes(out[0]) && out[1] === 'interface')) {
+      const at = out[0] === 'interface' ? 1 : 2;
+      if (out[at] === 'range') {
+        const items = rangeItems(out.slice(at + 1).join(' '));
+        if (!items) return { error: '% Invalid input: write a range as interface range fa0/1 - 4, g0/1' };
+        out.splice(at + 1, out.length, items.map((x) => (x.to ? `${x.from} - ${x.to}` : x.from)).join(' , '));
+      } else if (out[at]) out.splice(at, out.length - at, IMP.ifName(out.slice(at).join('')));
     }
     return { line: out.join(' ') };
+  }
+
+  // "fa0/1 - 4, g0/1" as [{ from: 'FastEthernet0/1', to: '4' }, { from: 'GigabitEthernet0/1' }].
+  function rangeItems(text) {
+    const parts = text.split(',').map((x) => x.replace(/\s+/g, '')).filter(Boolean);
+    const items = parts.map((x) => {
+      const m = /^([A-Za-z-]+[\d/]*?)(\d+)(?:-(\d+))?$/.exec(x);
+      return m && { from: IMP.ifName(m[1] + m[2]), to: m[3] || '' };
+    });
+    return items.length && items.every(Boolean) ? items : null;
+  }
+
+  // Every interface a range names, in order.
+  function rangeNames(text) {
+    return text.split(' , ').flatMap((x) => {
+      const [from, to] = x.split(' - ');
+      if (!to) return [from];
+      const m = /^(.*?)(\d+)$/.exec(from);
+      const out = [];
+      for (let i = +m[2]; i <= +to && out.length < 64; i++) out.push(m[1] + i);
+      return out;
+    });
   }
 
   function invalid(line, word) {
@@ -455,19 +488,25 @@
     return `${name}(${mode})#`;
   }
 
+  // A device's typed hostname, or the factory "Router"/"Switch".
+  function hostnameOf(practice, d) {
+    const dev = practice.devices[d.id];
+    const hn = dev && dev.blocks.find((b) => /^hostname /.test(b.head));
+    return hn ? hn.head.slice(9) : M.isRouter(d) ? 'Router' : 'Switch';
+  }
+
   // The prompt for a device: its typed hostname, or the factory "Router"/"Switch".
   function promptFor(ctx, devId) {
     const d = M.dev(ctx.target, devId);
     if (M.isHost(d)) return 'C:\\>';
-    const dev = ctx.practice.devices[devId];
-    const hn = dev && dev.blocks.find((b) => /^hostname /.test(b.head));
-    const name = hn ? hn.head.slice(9) : M.isRouter(d) ? 'Router' : 'Switch';
-    return prompt(name, ctx.session.mode, false);
+    if (ctx.session.confirm) return '';
+    return prompt(hostnameOf(ctx.practice, d), ctx.session.mode, false);
   }
 
   // Runs one line on a device. `ctx` carries the target and practice state plus the per-device
   // session ({ mode, cur }); the practice state is updated in place when configuration changes.
   function exec(ctx, devId, raw) {
+    let m;
     const target = ctx.target;
     const d = M.dev(target, devId);
     const ses = ctx.session;
@@ -476,9 +515,18 @@
     store.devices[devId] = store.devices[devId] || blank();
     const dev = store.devices[devId];
     const line = raw.trim();
+    // "[confirm]": Return or y goes ahead, anything else cancels.
+    if (ses.confirm) {
+      const what = ses.confirm;
+      ses.confirm = null;
+      if (line && !/^y/i.test(line)) return { out: '' };
+      return confirmed(ctx, d, dev, what);
+    }
+    ses.started = ses.started || Date.now();
     if (!line) return { out: '' };
+    ses.hist = [...(ses.hist || []), line].slice(-256);
     if (line.endsWith('?')) return { out: help(ses.mode, raw.trimStart(), d) };
-    const mode = ses.mode;
+    const mode = base(ses.mode);
     const cfgMode = mode !== 'user' && mode !== 'priv';
     // In a sub-mode, a global command drops back to global configuration first, as IOS does.
     let exp = expand(mode, line);
@@ -492,6 +540,7 @@
           exp = g;
           ses.mode = 'config';
           ses.cur = null;
+          ses.range = null;
         }
       }
     }
@@ -501,13 +550,19 @@
     if (cfgMode && /^do /.test(cmd)) {
       const inner = expand('priv', cmd.slice(3));
       if (inner.error) return { out: inner.error };
-      return execShow(ctx, d, inner.line);
+      if (/^(show|ping|traceroute|write terminal)\b/.test(inner.line)) return execShow(ctx, d, inner.line);
+      return execPriv(ctx, d, dev, inner.line, cmd.slice(3));
     }
-    if (cmd === 'end' && cfgMode) { ses.mode = 'priv'; ses.cur = null; return { out: '' }; }
+    if (cmd === 'end' && cfgMode) { ses.mode = 'priv'; ses.cur = null; ses.range = null; return { out: '' }; }
     if (cmd === 'exit') {
       if (mode === 'config') { ses.mode = 'priv'; return { out: '' }; }
-      if (cfgMode) { ses.mode = 'config'; ses.cur = null; return { out: '' }; }
-      ses.mode = 'user';
+      if (cfgMode) { ses.mode = 'config'; ses.cur = null; ses.range = null; return { out: '' }; }
+      return logout(ses);
+    }
+    if (cmd === 'logout') return logout(ses);
+    if (/^terminal\b/.test(cmd)) {
+      const n = /^terminal history size (\d+)$/.exec(cmd);
+      if (n) ses.histSize = Math.min(256, +n[1]);
       return { out: '' };
     }
     if (mode === 'user') {
@@ -515,16 +570,52 @@
       if (/^(show|ping|traceroute)\b/.test(cmd)) return execShow(ctx, d, cmd);
       return { out: invalid(line, line.split(/\s+/)[0]) };
     }
-    if (mode === 'priv') {
-      if (cmd === 'disable') { ses.mode = 'user'; return { out: '' }; }
-      if (cmd === 'configure terminal' || cmd === 'configure') { ses.mode = 'config'; ses.cur = null; return { out: 'Enter configuration commands, one per line.  End with CNTL/Z.' }; }
-      if (/^(write memory|write|copy running-config startup-config)$/.test(cmd)) return { out: 'Building configuration...\n[OK]' };
-      return execShow(ctx, d, cmd);
+    if (mode === 'priv') return execPriv(ctx, d, dev, cmd, line);
+    if ((m = /^default interface (\S+)$/.exec(cmd))) {
+      const check = validateInterface(target, d, `interface ${m[1]}`);
+      if (check) return { out: check };
+      dev.blocks = dev.blocks.filter((b) => b.head !== `interface ${m[1]}`);
+      return { out: `Interface ${m[1]} set to default configuration`, changed: true };
     }
+    if ((m = /^interface range (.+)$/.exec(cmd))) {
+      const names = rangeNames(m[1]);
+      for (const n of names) {
+        const check = validateInterface(target, d, `interface ${n}`);
+        if (check) return { out: check };
+      }
+      let blocks = dev.blocks;
+      const at = names.map((n) => {
+        const r = applyLine(blocks, null, 'config', `interface ${n}`);
+        blocks = r.blocks;
+        return r.cur;
+      });
+      dev.blocks = blocks;
+      Object.assign(ses, { mode: 'config-if-range', cur: at[0], range: at });
+      return { out: '', changed: true };
+    }
+    // In interface range mode each line goes to every interface in the range.
+    const targets = ses.mode === 'config-if-range' && ses.range ? ses.range : [ses.cur];
+    let blocks = dev.blocks;
+    let res;
+    for (const cur of targets) {
+      res = applyChecked(target, d, blocks, cur, mode, cmd);
+      if (res.out) return res;
+      blocks = res.blocks;
+    }
+    dev.blocks = blocks;
+    if (targets.length > 1 && res.mode === 'config-if') res.mode = 'config-if-range';
+    if (res.mode !== 'config-if-range') ses.range = null;
+    ses.mode = res.mode;
+    ses.cur = res.cur;
+    return { out: '', changed: true };
+  }
+
+  // Applies one configuration line, or says why it was not applied. The importer is the
+  // arbiter of what PatchLab understands.
+  function applyChecked(target, d, blocks, cur, mode, cmd) {
     const check = validateInterface(target, d, cmd);
     if (check) return { out: check };
-    const res = applyLine(dev.blocks, ses.cur, ses.mode, cmd);
-    // The importer is the arbiter of what PatchLab understands.
+    const res = applyLine(blocks, cur, mode, cmd);
     const ser = serialize(res.blocks);
     const parsed = IMP.parse(ser.text);
     const bad = parsed.skipped.find((x) => {
@@ -533,10 +624,55 @@
       return (ki < 0 ? b.head : b.kids[ki]) === cmd.replace(/^no /, '') || (ki < 0 ? b.head : b.kids[ki]) === cmd;
     });
     if (bad) return { out: NOT_SIMULATED.test(cmd) ? '% PatchLab does not simulate this command, so it was not applied.' : '% Invalid input, or a command PatchLab does not simulate. Nothing was applied.' };
-    dev.blocks = res.blocks;
-    ses.mode = res.mode;
-    ses.cur = res.cur;
-    return { out: '', changed: true };
+    return res;
+  }
+
+  function logout(ses) {
+    Object.assign(ses, { mode: 'user', cur: null, range: null });
+    return { out: '\n\nPress RETURN to get started.' };
+  }
+
+  // Privileged EXEC commands, also reached from configuration mode with "do".
+  function execPriv(ctx, d, dev, cmd, line) {
+    const ses = ctx.session;
+    if (cmd === 'disable') { ses.mode = 'user'; return { out: '' }; }
+    if (cmd === 'configure terminal' || cmd === 'configure') { ses.mode = 'config'; ses.cur = null; return { out: 'Enter configuration commands, one per line.  End with CNTL/Z.' }; }
+    if (/^(write memory|write)$/.test(cmd)) return saveStartup(dev, 'Building configuration...\n[OK]');
+    if (cmd === 'copy running-config startup-config') return saveStartup(dev, 'Destination filename [startup-config]? \nBuilding configuration...\n[OK]');
+    if (cmd === 'copy startup-config running-config') {
+      if (!dev.startup) return { out: '%Error opening nvram:/startup-config (No such file or directory)' };
+      dev.blocks = clone(dev.startup);
+      return { out: 'Destination filename [running-config]? \n[OK] (merged into the running configuration)', changed: true };
+    }
+    if (cmd === 'erase startup-config' || cmd === 'write erase') {
+      ses.confirm = 'erase';
+      return { out: 'Erasing the nvram filesystem will remove all configuration files! Continue? [confirm]' };
+    }
+    if (cmd === 'reload') {
+      ses.confirm = 'reload';
+      const unsaved = JSON.stringify(dev.blocks) !== JSON.stringify(dev.startup || []);
+      return { out: `${unsaved ? 'System configuration has been modified. Unsaved changes are lost on reload; save first with copy run start.\n' : ''}Proceed with reload? [confirm]` };
+    }
+    if (/^clock set\b/.test(cmd)) return { out: '% PatchLab keeps the clock in step with your computer.' };
+    if (/^(show|ping|traceroute|write terminal)\b/.test(cmd)) return execShow(ctx, d, cmd);
+    return { out: invalid(line, line.trim().split(/\s+/)[0]) };
+  }
+
+  function saveStartup(dev, out) {
+    dev.startup = clone(dev.blocks);
+    return { out, changed: true };
+  }
+
+  function confirmed(ctx, d, dev, what) {
+    const ses = ctx.session;
+    if (what === 'erase') {
+      dev.startup = null;
+      return { out: '[OK]\nErase of nvram: complete', changed: true };
+    }
+    // A reload starts again from the saved configuration, or factory defaults without one.
+    dev.blocks = clone(dev.startup || []);
+    Object.assign(ses, { mode: 'user', cur: null, range: null, booted: Date.now() });
+    return { out: `\nSystem Bootstrap, Version 15.2, RELEASE SOFTWARE\nBooting ${MODELS[d.model].label}...\n${dev.startup ? '' : '\n--- System Configuration Dialog ---\n(no startup-config: starting from factory defaults)\n'}\nPress RETURN to get started.`, changed: true };
   }
 
   function validateInterface(target, d, cmd) {
@@ -559,7 +695,7 @@
     const line = raw.trim();
     const w = line.split(/\s+/);
     if (!line) return { out: '' };
-    if (/^(help|\?)$/i.test(line)) return { out: 'ipconfig                       show the address\nipconfig <ip> <mask> [gateway] set a static address\nipconfig /dhcp                 get an address by DHCP\nipv6config auto                use SLAAC\nipv6config <addr/len> <gw>     set a static IPv6 address\nping <address>' };
+    if (/^(help|\?)$/i.test(line)) return { out: 'ipconfig                       show the address\nipconfig <ip> <mask> [gateway] set a static address\nipconfig /dhcp                 get an address by DHCP\nipv6config auto                use SLAAC\nipv6config <addr/len> <gw>     set a static IPv6 address\nping <address>\ntracert <address>' };
     if (/^ipconfig$/i.test(line)) {
       const sim = S.simulate(buildStudent(ctx.target, store));
       const lease = sim.leases[d.id];
@@ -587,6 +723,7 @@
       return { out: '', changed: true };
     }
     if (/^ping /i.test(line)) return execShow(ctx, d, `ping ${w[1]}`);
+    if (/^tracert /i.test(line)) return execShow(ctx, d, `tracert ${w[1]}`);
     return { out: `Invalid Command. Type help for the list.` };
   }
 
@@ -594,7 +731,7 @@
 
   // "show run | include route": run the command, then filter its lines as IOS does.
   function execShow(ctx, d, cmd) {
-    const pipe = /^(.*?)\s*\|\s*(i|in|inc|incl|include|e|ex|exclude|s|sec|section|b|be|begin)\w*\s+(.+)$/i.exec(cmd);
+    const pipe = /^(.*?)\s*\|\s*(i|in|inc|incl|include|e|ex|exclude|s|sec|section|b|be|begin|c|co|cou|coun|count)\w*\s+(.+)$/i.exec(cmd);
     if (!pipe) return execShowRaw(ctx, d, cmd);
     const res = execShowRaw(ctx, d, expand('priv', pipe[1]).line || pipe[1]);
     let re;
@@ -605,6 +742,7 @@
     if (op === 'i') out = lines.filter((l) => re.test(l));
     else if (op === 'e') out = lines.filter((l) => !re.test(l));
     else if (op === 'b') out = lines.slice(Math.max(0, lines.findIndex((l) => re.test(l))));
+    else if (op === 'c') out = [`Number of lines which match regexp = ${lines.filter((l) => re.test(l)).length}`];
     else {
       out = [];
       lines.forEach((l, i) => {
@@ -629,9 +767,26 @@
       if (M.isHost(d)) return { out: `${head}\n${r.ok ? [1, 2, 3, 4].map(() => `Reply from ${m[1]}: bytes=32 time<1ms TTL=${r.fwd.hops.length > 2 ? 254 : 255}`).join('\n') : 'Request timed out.\nRequest timed out.\nRequest timed out.\nRequest timed out.'}\n\nPing statistics for ${m[1]}:\n    Packets: Sent = 4, Received = ${r.ok ? 4 : 0}, Lost = ${r.ok ? 0 : 4} (${r.ok ? 0 : 100}% loss)${r.ok ? '' : `\n\n% PatchLab: ${r.reason}`}`, ping: r };
       return { out: `${head}${r.ok ? '!!!!!' : '.....'}\nSuccess rate is ${r.ok ? '100 percent (5/5), round-trip min/avg/max = 1/1/2 ms' : '0 percent (0/5)'}${r.ok ? '' : `\n% PatchLab: ${r.reason}`}`, ping: r };
     }
+    if ((m = /^(?:traceroute|tracert) (\S+)$/.exec(cmd))) return { out: trace(sim, d, m[1]) };
     if (M.isHost(d)) return { out: 'Invalid Command.' };
-    if (/^show (running-config|startup-config)$/.test(cmd)) {
-      return { out: `Building configuration...\n\nCurrent configuration:\n!\n${C.generate(student, sd, { paste: false, notes: false, sim }).split('\n').filter((l) => !/^! /.test(l)).join('\n')}\n!\nend` };
+    const mine = (ctx.practice.devices[d.id] || blank());
+    if (cmd === 'show running-config' || cmd === 'write terminal') {
+      const text = configText(ctx.practice, d, mine.blocks);
+      return { out: `Building configuration...\n\nCurrent configuration : ${text.length} bytes\n${text}` };
+    }
+    if ((m = /^show running-config interface (\S+)$/.exec(cmd))) {
+      const lines = configText(ctx.practice, d, mine.blocks).split('\n');
+      const at = lines.indexOf(`interface ${m[1]}`);
+      if (at < 0) return { out: invalid(cmd, cmd.split(' ').pop()) };
+      let end = at + 1;
+      while (end < lines.length && /^ /.test(lines[end])) end++;
+      const sec = lines.slice(at, end).join('\n');
+      return { out: `Building configuration...\n\nCurrent configuration : ${sec.length} bytes\n!\n${sec}\nend` };
+    }
+    if (cmd === 'show startup-config') {
+      if (!mine.startup) return { out: 'startup-config is not present' };
+      const text = configText(ctx.practice, d, mine.startup);
+      return { out: `Using ${text.length} out of 262144 bytes\n${text}` };
     }
     if (cmd === 'show ip interface brief') {
       const rows = ['Interface              IP-Address      OK? Method Status                Protocol'];
@@ -653,9 +808,10 @@
       ifs.sort((a, b) => naturalCompare(a[0], b[0])).forEach(([n, ip, st, pr]) => rows.push(`${n.padEnd(23)}${ip.padEnd(16)}YES manual ${st.padEnd(22)}${pr}`));
       return { out: rows.join('\n') };
     }
-    if (/^show ip route/.test(cmd)) {
+    if ((m = /^show ip route(?: (connected|static|ospf|rip|bgp))?$/.exec(cmd))) {
       if (!M.canRoute(sd)) return { out: 'Default gateway is ' + (sd.gateway || 'not set') };
-      const lines = S.showRoutes(sim, sd);
+      const only = { connected: /^[CL]/, static: /^S/, ospf: /^O/, rip: /^R/, bgp: /^B/ }[m[1]];
+      const lines = S.showRoutes(sim, sd).filter((r) => !only || only.test(r.code));
       const def = lines.find((r) => r.len === 0);
       return { out: ['Codes: L - local, C - connected, S - static, R - RIP, O - OSPF, B - BGP', '', def ? `Gateway of last resort is ${def.nh || '0.0.0.0'} to network 0.0.0.0` : 'Gateway of last resort is not set', '',
         ...lines.map((r) => `${r.code.padEnd(5)}${r.text}`)].join('\n') };
@@ -704,13 +860,184 @@
     if (cmd === 'show ipv6 route') {
       return { out: ['IPv6 Routing Table - default', ...PL.ipv6.showRoutes(sim, sd).map((r) => `${r.code.padEnd(3)}${r.net}/${r.len}${r.nh ? ` via ${r.nh}` : ''}${r.ifName ? `, ${shortName(r.ifName)}` : ''}`)].join('\n') };
     }
+    const more = moreShows(ctx, d, sd, student, sim, cmd);
+    if (more) return more;
     if (/^show /.test(cmd)) return { out: '% PatchLab does not simulate this show command.' };
     return { out: invalid(cmd, cmd.split(' ')[0]) };
   }
 
+  // ---------- The configuration as IOS shows it ----------
+
+  // Where each kind of global line sits in show running-config.
+  const ORDER = [[/^(no )?service /, 1], [/^hostname /, 2], [/^enable /, 3], [/^username /, 4], [/^(no )?ip domain|^ip name-server/, 5],
+    [/^ip dhcp excluded/, 6], [/^ip dhcp pool/, 7], [/^(no )?ip dhcp snooping/, 8], [/^(no )?ip routing|^(no )?ipv6 unicast/, 9], [/^(no )?ip cef|^crypto/, 10],
+    [/^spanning-tree/, 11], [/^vlan /, 12], [/^interface /, 20], [/^router |^ipv6 router/, 30], [/^ip (route|default-gateway|nat|http)|^ipv6 route/, 40],
+    [/^ip access-list|^access-list/, 50], [/^banner /, 60], [/^line /, 70]];
+  const rankOf = (head) => (ORDER.find(([re]) => re.test(head)) || [null, 45])[1];
+  const IF_ORDER = ['Loopback', 'Port-channel', '', 'Vlan'];
+  const ifRank = (n) => { const i = IF_ORDER.indexOf(/^[A-Za-z-]+/.exec(n)[0]); return i < 0 ? 2 : i; };
+
+  // The running (or startup) configuration as the student typed it, laid out as IOS prints it:
+  // factory defaults for everything untouched, every port listed, sections separated by "!".
+  function configText(practice, d, blocks) {
+    const router = M.isRouter(d);
+    const find = (head) => blocks.find((b) => b.head === head);
+    // VLANs live in vlan.dat, not the running configuration, so show vlan brief lists them.
+    const globals = blocks.filter((b) => !/^interface |^line |^hostname |^vlan \d|^(no )?service password-encryption$/.test(b.head))
+      .sort((a, b) => rankOf(a.head) - rankOf(b.head));
+    const sect = (lo, hi) => globals.filter((b) => rankOf(b.head) >= lo && rankOf(b.head) < hi).flatMap((b) => [b.head, ...b.kids.map((k) => ` ${k}`)]);
+    const out = ['!', 'version 15.2', 'service timestamps debug datetime msec', 'service timestamps log datetime msec',
+      find('service password-encryption') ? 'service password-encryption' : 'no service password-encryption', '!',
+      `hostname ${hostnameOf({ devices: { [d.id]: { blocks } } }, d)}`, '!', 'boot-start-marker', 'boot-end-marker', '!'];
+    const push = (lines) => { if (lines.length) out.push(...lines, '!'); };
+    push(sect(3, 11));
+    const stp = sect(11, 20);
+    if (!router && !stp.some((l) => /^spanning-tree mode/.test(l))) stp.unshift('spanning-tree mode pvst');
+    if (!router) stp.push('spanning-tree extend system-id');
+    push(stp);
+    // Every port, then the interfaces the student created.
+    const ports = MODELS[d.model].ports;
+    const names = new Set([...ports, ...(router ? [] : ['Vlan1']), ...blocks.filter((b) => /^interface /.test(b.head)).map((b) => b.head.slice(10))]);
+    [...names].sort((a, b) => ifRank(a) - ifRank(b) || naturalCompare(a, b)).forEach((n) => {
+      const kids = (find(`interface ${n}`) || { kids: [] }).kids;
+      const physical = ports.includes(n);
+      const routed = router || /^(Loopback|Vlan)/.test(n) || kids.includes('no switchport');
+      const shutByDefault = (router && physical) || /^Vlan/.test(n);
+      const shut = kids.includes('shutdown') || (shutByDefault && !kids.includes('no shutdown'));
+      const body = kids.filter((k) => k !== 'shutdown' && k !== 'no shutdown');
+      const desc = body.filter((k) => /^description /.test(k));
+      const rest = body.filter((k) => !/^description /.test(k));
+      const lines = [...desc, ...(routed && !rest.some((k) => /^ip address /.test(k)) ? ['no ip address'] : []), ...rest, ...(shut ? ['shutdown'] : []),
+        ...(router && physical ? ['duplex auto', 'speed auto'] : [])];
+      out.push(`interface ${n}`, ...lines.map((l) => ` ${l}`), '!');
+    });
+    push(sect(30, 40));
+    push(['ip forward-protocol nd', 'no ip http server', ...sect(40, 50)]);
+    push(sect(50, 60));
+    push(sect(60, 70));
+    // Console, aux and vty lines, with whatever was typed under them.
+    const conKids = (blocks.find((b) => /^line console 0$/.test(b.head)) || { kids: [] }).kids;
+    out.push('line con 0', ...conKids.map((k) => ` ${k}`));
+    if (router) out.push('line aux 0');
+    const vtys = blocks.filter((b) => /^line vty /.test(b.head)).map((b) => [b.head.slice(5), b.kids]);
+    if (!vtys.some(([h]) => /^vty 0 /.test(h))) vtys.unshift(['vty 0 4', []]);
+    if (!router && !vtys.some(([h]) => /^vty (5 |0 15$)/.test(h))) vtys.push(['vty 5 15', []]);
+    vtys.forEach(([h, kids]) => out.push(`line ${h}`, ...(kids.some((k) => /^(no )?login/.test(k)) ? [] : [' login']), ...kids.map((k) => ` ${k}`)));
+    out.push('!', 'end');
+    return out.join('\n');
+  }
+
+  // show commands beyond the basics: version, clock, history, interface status, CDP, MAC
+  // table and routing protocols.
+  function moreShows(ctx, d, sd, student, sim, cmd) {
+    const ses = ctx.session;
+    const ports = MODELS[sd.model].ports;
+    const blocks = (ctx.practice.devices[d.id] || blank()).blocks;
+    const kidsOf = (n) => (blocks.find((b) => b.head === `interface ${n}`) || { kids: [] }).kids;
+    const descOf = (n) => (kidsOf(n).find((k) => /^description /.test(k)) || '').slice(12);
+    const linkUp = (n) => { const l = M.linkOnPort(student, sd.id, n); return !!l && S.linkIsUp(sim, l); };
+    const cdpName = (n) => shortName(n).replace(/^([A-Za-z]+)/, (w) => `${w.slice(0, 3)} `);
+    if (cmd === 'show version') {
+      const up = Math.max(1, Math.round((Date.now() - (ses.booted || ses.started || Date.now())) / 60000));
+      const gig = ports.filter((n) => /^Gigabit/.test(n)).length;
+      const fast = ports.filter((n) => /^Fast/.test(n)).length;
+      return { out: [`Cisco IOS Software, ${MODELS[sd.model].label} Software, Version 15.2, RELEASE SOFTWARE (PatchLab)`, '',
+        `${hostnameOf(ctx.practice, d)} uptime is ${up} minute${up === 1 ? '' : 's'}`, 'System returned to ROM by power-on', 'System image file is "flash:/patchlab-universalk9.bin"', '',
+        `cisco ${MODELS[sd.model].label} processor with 524288K bytes of memory.`, ...(fast ? [`${fast} FastEthernet interfaces`] : []), ...(gig ? [`${gig} Gigabit Ethernet interfaces`] : []),
+        '256K bytes of non-volatile configuration memory.', '', 'Configuration register is 0x2102'].join('\n') };
+    }
+    if (cmd === 'show clock') {
+      const t = new Date();
+      const p2 = (x) => String(x).padStart(2, '0');
+      const day = t.toLocaleDateString('en-US', { weekday: 'short' });
+      const mon = t.toLocaleDateString('en-US', { month: 'short' });
+      return { out: `*${p2(t.getHours())}:${p2(t.getMinutes())}:${p2(t.getSeconds())}.${String(t.getMilliseconds()).padStart(3, '0')} UTC ${day} ${mon} ${t.getDate()} ${t.getFullYear()}` };
+    }
+    if (cmd === 'show history') return { out: (ses.hist || []).slice(-(ses.histSize || 10)).map((l) => `  ${l}`).join('\n') };
+    if (cmd === 'show interfaces status') {
+      if (!M.isSwitch(sd)) return { out: invalid(cmd, 'status') };
+      const rows = ['Port      Name               Status       Vlan       Duplex  Speed Type'];
+      ports.forEach((n) => {
+        const l = M.linkOnPort(student, sd.id, n);
+        const st = M.port(sd, n).shutdown ? 'disabled' : linkUp(n) ? 'connected' : 'notconnect';
+        const typed = /(\d+)$/.exec(kidsOf(n).find((k) => /^switchport access vlan /.test(k)) || '');
+        const vlan = kidsOf(n).includes('no switchport') ? 'routed' : l && l.mode === 'trunk' && !M.isL3End(student, l, sd.id) ? 'trunk' : String(l ? l.vlan : typed ? typed[1] : 1);
+        const gig = /^Gigabit/.test(n);
+        const on = st === 'connected';
+        rows.push(`${shortName(n).padEnd(10)}${descOf(n).slice(0, 18).padEnd(19)}${st.padEnd(13)}${vlan.padEnd(11)}${(on ? 'a-full' : 'auto').padEnd(8)}${(on ? (gig ? 'a-1000' : 'a-100') : 'auto').padEnd(6)}${gig ? '10/100/1000BaseTX' : '10/100BaseTX'}`);
+      });
+      return { out: rows.join('\n') };
+    }
+    if (cmd === 'show interfaces description') {
+      const rows = ['Interface                      Status         Protocol Description'];
+      const typed = blocks.map((b) => /^interface (\S+)$/.exec(b.head)).filter(Boolean).map((x) => x[1]).filter((n) => !ports.includes(n));
+      [...ports, ...typed].sort((a, b) => ifRank(a) - ifRank(b) || naturalCompare(a, b)).forEach((n) => {
+        const phys = n.split('.')[0];
+        const i = (sim.byDev[sd.id] || []).find((x) => x.name === n);
+        const admin = ports.includes(phys) ? !!M.port(sd, phys).shutdown : kidsOf(n).includes('shutdown') || (/^Vlan/.test(n) && !kidsOf(n).includes('no shutdown'));
+        const up = !admin && (ports.includes(phys) ? linkUp(phys) : !!(i && i.up));
+        rows.push(`${shortName(n).padEnd(31)}${(admin ? 'admin down' : up ? 'up' : 'down').padEnd(15)}${(up ? 'up' : 'down').padEnd(9)}${descOf(n)}`);
+      });
+      return { out: rows.join('\n') };
+    }
+    if (/^show cdp neighbors( detail)?$/.test(cmd)) {
+      const rows = ['Capability Codes: R - Router, T - Trans Bridge, B - Source Route Bridge', '                  S - Switch, H - Host, I - IGMP, r - Repeater, P - Phone', '',
+        'Device ID        Local Intrfce     Holdtme    Capability  Platform  Port ID'];
+      M.linksOf(student, sd.id).forEach((l) => {
+        const peer = M.dev(student, M.peerOf(l, sd.id));
+        if (M.isHost(peer) || !S.linkIsUp(sim, l)) return;
+        const cap = M.isRouter(peer) ? 'R B S I' : M.canRoute(peer) ? 'R S I' : 'S I';
+        const plat = MODELS[peer.model].label.split(/\s+/).pop().slice(0, 9);
+        rows.push(`${hostnameOf(ctx.practice, peer).slice(0, 16).padEnd(17)}${cdpName(M.endIf(l, sd.id)).padEnd(18)}${'163'.padEnd(11)}${cap.padEnd(12)}${plat.padEnd(10)}${cdpName(M.endIf(l, peer.id))}`);
+      });
+      return { out: rows.join('\n') };
+    }
+    if (cmd === 'show mac address-table') {
+      if (!M.isSwitch(sd)) return { out: invalid(cmd, 'mac') };
+      const rows = ['          Mac Address Table', '-------------------------------------------', '', 'Vlan    Mac Address       Type        Ports', '----    -----------       --------    -----'];
+      const ent = [];
+      M.linksOf(student, sd.id).forEach((l) => {
+        if (!S.linkIsUp(sim, l)) return;
+        const peer = M.dev(student, M.peerOf(l, sd.id));
+        ent.push([l.mode === 'trunk' ? l.nativeVlan : l.vlan, M.macFor(`${peer.id}:${M.endIf(l, peer.id)}`), shortName(M.endIf(l, sd.id))]);
+      });
+      ent.sort((a, b) => a[0] - b[0] || naturalCompare(a[2], b[2])).forEach(([v, mac, n]) => rows.push(`${String(v).padStart(4)}    ${mac}    DYNAMIC     ${n}`));
+      rows.push(`Total Mac Addresses for this criterion: ${ent.length}`);
+      return { out: rows.join('\n') };
+    }
+    if (cmd === 'show ip protocols') {
+      return { out: blocks.filter((b) => /^router (ospf|rip|bgp)/.test(b.head)).map((b) => {
+        const name = b.head.replace(/^router /, '');
+        const rid = (b.kids.find((k) => /^router-id /.test(k)) || '').slice(10);
+        const nets = b.kids.filter((k) => /^network /.test(k)).map((k) => `    ${k.slice(8)}`);
+        const passive = b.kids.filter((k) => /^passive-interface /.test(k)).map((k) => `    ${k.slice(18)}`);
+        return [`Routing Protocol is "${name}"`, '  Outgoing update filter list for all interfaces is not set', '  Incoming update filter list for all interfaces is not set',
+          ...(rid ? [`  Router ID ${rid}`] : []), '  Routing for Networks:', ...nets, ...(passive.length ? ['  Passive Interface(s):', ...passive] : []),
+          `  Distance: (default is ${{ ospf: 110, rip: 120, bgp: 20 }[name.split(' ')[0]]})`].join('\n');
+      }).join('\n\n') };
+    }
+    return null;
+  }
+
+  // traceroute from a router, or tracert from a PC: one line per routed hop.
+  function trace(sim, d, dest) {
+    const host = M.isHost(d);
+    if (N.ip2n(dest) === null) return host ? `Unable to resolve target system name ${dest}.` : '% Unrecognized host or address, or protocol not running.';
+    const r = S.ping(sim, d.id, dest);
+    const hops = r.fwd && r.fwd.hops ? r.fwd.hops.slice(1) : [];
+    const ips = hops.map((h, i) => (i === hops.length - 1 && r.ok ? dest : ((sim.byDev[h.devId] || []).find((x) => x.name === h.in) || {}).ip)).filter(Boolean);
+    const lines = ips.map((ip, i) => (host ? `  ${String(i + 1).padStart(2)}   0 ms   0 ms   1 ms  ${ip}` : `  ${i + 1} ${ip} 0 msec 1 msec 0 msec`));
+    if (!r.ok) {
+      for (let i = 1; i <= 3; i++) lines.push(host ? `  ${String(ips.length + i).padStart(2)}     *        *        *     Request timed out.` : `  ${ips.length + i}  *  *  * `);
+      lines.push(`% PatchLab: ${r.reason}`);
+    }
+    return host ? `\nTracing route to ${dest} over a maximum of 30 hops:\n\n${lines.join('\n')}${r.ok ? '\n\nTrace complete.' : ''}`
+      : `Type escape sequence to abort.\nTracing the route to ${dest}\n${lines.join('\n')}`;
+  }
+
   // ---------- Tab completion and ? help ----------
 
-  const HOST_WORDS = ['help', 'ipconfig', 'ipv6config', 'ping'];
+  const HOST_WORDS = ['help', 'ipconfig', 'ipv6config', 'ping', 'tracert'];
 
   // The interface names a device has: its ports, plus the virtual ones it may create.
   function ifTypes(d) {
@@ -738,6 +1065,7 @@
   // Tab completion for the last word, as IOS does it: a word that fits one keyword (or one
   // interface on this device) is written out in full; otherwise the line is left alone.
   function complete(mode, line, d) {
+    mode = base(mode);
     if (d && M.isHost(d)) {
       const hits = /^\S*$/.test(line) ? startsWith(HOST_WORDS, line) : [];
       return hits.length === 1 ? `${hits[0]} ` : line;
@@ -763,9 +1091,37 @@
     return line;
   }
 
+  // What the last word could become, for listing on a second Tab: keywords, or this device's
+  // interfaces ("GigabitEthernet0/" lists GigabitEthernet0/1 and GigabitEthernet0/2).
+  function options(mode, line, d) {
+    mode = base(mode);
+    if (d && M.isHost(d)) return /^\S*$/.test(line) ? startsWith(HOST_WORDS, line) : [];
+    const words = line.split(/\s+/);
+    const last = words.pop();
+    const typed = words.filter(Boolean);
+    const exp = typed.length ? expand(mode, typed.join(' ')) : { line: '' };
+    if (exp.error) return [];
+    let prev = exp.line ? exp.line.split(' ') : [];
+    if (prev[0] === 'no' && mode !== 'user' && mode !== 'priv') prev = prev.slice(1);
+    if (prev[0] === 'do' && mode !== 'user' && mode !== 'priv') return options('priv', line.replace(/^\s*\S+\s*/, ''), d);
+    const words2 = startsWith(choices(mode, prev), last || '').slice().sort();
+    if (!d || !IF_WORDS.has(prev[prev.length - 1])) return words2;
+    const { ports, types } = ifTypes(d);
+    const [, word, rest] = /^([A-Za-z-]*)(.*)$/.exec(last || '');
+    const kinds = startsWith(types, word);
+    // A whole type name typed: list the ports that fit; otherwise list the types.
+    if (kinds.length === 1 && (rest || word.length >= kinds[0].length)) {
+      const full = kinds[0] + rest;
+      const fit = ports.filter((n) => n.startsWith(full));
+      return fit.length ? fit : [`${kinds[0]}<number>`];
+    }
+    return [...words2, ...kinds];
+  }
+
   // "?" on its own lists what may come first; "show ?" what may follow show; "sh?" the words
   // starting sh.
   function help(mode, line, d) {
+    mode = base(mode);
     const body = line.replace(/\?$/, '');
     const partial = !/(^|\s)$/.test(body);
     const words = body.trim().split(/\s+/).filter(Boolean);
@@ -782,5 +1138,5 @@
     return hits.length ? hits.slice().sort().map((w) => `  ${w}`).join('\n') : '% Unrecognized command';
   }
 
-  PL.practice = { expand, exec, promptFor, buildStudent, score, fixCommands, prompt, complete, serialize, applyLine };
+  PL.practice = { expand, exec, promptFor, buildStudent, score, fixCommands, prompt, complete, options, serialize, applyLine, configText };
 })(typeof window !== 'undefined' ? (window.PL = window.PL || {}) : (globalThis.PL = globalThis.PL || {}));

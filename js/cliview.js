@@ -44,7 +44,7 @@
             <div class="btn-row"><button type="button" class="btn small" data-c="clear">Clear screen</button><button type="button" class="btn small" data-c="reset">Reset device</button><button type="button" class="btn small" data-c="solution">Show solution</button></div></div>
           <div class="term-box" id="cli-box"><pre id="cli-out" class="term" tabindex="-1"></pre>
           <form id="cli-form" class="term-in"><label for="cli-in" id="cli-prompt" class="prompt"></label><input id="cli-in" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Command"></form></div>
-          <p class="note">Type IOS commands as on the real console. Abbreviations work (conf t, int g0/1, no shut, wr), Tab completes commands and interface names (int gig → GigabitEthernet0/), ? lists what can come next (sh ?, sw?), ↑/↓ recall history, Ctrl+Z ends configuration. PCs take ipconfig and ping.</p>
+          <p class="note">Type IOS commands as on the real console. Abbreviations work (conf t, int g0/1, no shut, wr), Tab completes commands and interface names (int gig → GigabitEthernet0/), ? lists what can come next (sh ?, sw?), ↑/↓ recall history, Ctrl+Z ends configuration, Ctrl+A/E/W/U/K edit the line as on IOS. A second Tab lists what fits. PCs take ipconfig and ping.</p>
         </section>
         <aside class="cli-right"><div class="cli-card" id="cli-score"></div><div class="cli-card" id="cli-ask"></div></aside>
       </div>
@@ -113,11 +113,66 @@
         el.input.value = hist[i] || '';
       } else if (e.key === 'Tab') {
         e.preventDefault();
-        el.input.value = P.complete(session(d.id).mode, el.input.value, d);
-      } else if ((e.key === 'z' || e.key === 'Z') && e.ctrlKey) {
+        const mode = session(d.id).mode;
+        const now = el.input.value;
+        const next = P.complete(mode, now, d);
+        // A Tab that cannot complete any further lists what would fit, as ? does.
+        if (next === now) showOptions(d, P.options(mode, now, d));
+        else el.input.value = next;
+      } else if (e.ctrlKey && !e.metaKey && !e.altKey && EDIT[e.key.toLowerCase()]) {
         e.preventDefault();
-        submit('end');
+        EDIT[e.key.toLowerCase()](d);
+      } else if (e.altKey && !e.ctrlKey && (e.code === 'KeyB' || e.code === 'KeyF')) {
+        e.preventDefault();
+        moveWord(e.code === 'KeyB' ? -1 : 1);
       }
+    }
+
+    // IOS (Emacs-style) line editing keys.
+    const caret = (i) => { const n = Math.max(0, Math.min(el.input.value.length, i)); el.input.setSelectionRange(n, n); };
+    const at = () => el.input.selectionStart;
+    const cut = (from, to) => {
+      const v = el.input.value;
+      el.input.value = v.slice(0, from) + v.slice(to);
+      caret(from);
+    };
+    const wordStart = (i) => { const v = el.input.value; while (i > 0 && v[i - 1] === ' ') i--; while (i > 0 && v[i - 1] !== ' ') i--; return i; };
+    const wordEnd = (i) => { const v = el.input.value; while (i < v.length && v[i] === ' ') i++; while (i < v.length && v[i] !== ' ') i++; return i; };
+    const moveWord = (dir) => caret(dir < 0 ? wordStart(at()) : wordEnd(at()));
+    const recall = (d, dir) => onKey({ key: dir < 0 ? 'ArrowUp' : 'ArrowDown', preventDefault() {} });
+    const EDIT = {
+      a: () => caret(0), // start of line
+      e: () => caret(el.input.value.length), // end of line
+      b: () => caret(at() - 1), // back a character
+      f: () => caret(at() + 1), // forward a character
+      d: () => cut(at(), at() + 1), // delete the character at the cursor
+      k: () => cut(at(), el.input.value.length), // delete to the end of the line
+      u: () => cut(0, at()), // delete to the start of the line
+      x: () => cut(0, at()),
+      w: () => cut(wordStart(at()), at()), // delete the word before the cursor
+      p: (d) => recall(d, -1), // previous command
+      n: (d) => recall(d, 1), // next command
+      z: () => submit('end'), // leave configuration mode
+      c: (d) => { // abandon the line; in configuration mode, return to privileged EXEC
+        const mode = session(d.id).mode;
+        el.input.value = '';
+        if (mode !== 'user' && mode !== 'priv') submit('end');
+      },
+      l: () => render(), // redraw
+    };
+
+    // Lists the options for a Tab that could not complete, then shows the line again.
+    function showOptions(d, list) {
+      if (!list.length) return;
+      const lines = log(d.id);
+      if (!lines.length) lines.push(...banner(d));
+      const prompt = P.promptFor(ctxFor(d.id), d.id);
+      const width = Math.max(...list.map((x) => x.length)) + 2;
+      const per = Math.max(1, Math.floor(72 / width));
+      lines.push(`${prompt}${el.input.value}`);
+      for (let i = 0; i < list.length; i += per) lines.push(list.slice(i, i + per).map((x) => x.padEnd(width)).join('').trimEnd());
+      render();
+      el.input.focus();
     }
 
     function onClick(e) {
