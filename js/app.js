@@ -82,8 +82,10 @@
       remote.user = (await me.json()).email;
       STORE = `patchlab.project.v1:${remote.user}`;
       const st = await fetch('/api/state', { headers: { 'X-PatchLab': '1' } });
+      // "Saved" only once there is something on the server; a new user has nothing yet.
+      if (st.status !== 200) return null;
       remote.state = 'Saved';
-      return st.status === 200 ? (await st.json()).project : null;
+      return (await st.json()).project;
     } catch (e) {
       return null;
     }
