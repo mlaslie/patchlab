@@ -52,32 +52,62 @@
     'default-information': ['originate'], 'enable': ['password', 'secret'], 'service': ['password-encryption'],
     line: ['console', 'vty'], transport: ['input'], 'transport input': ['all', 'none', 'ssh', 'telnet'], logging: ['synchronous'],
     redistribute: ['bgp', 'connected', 'ospf', 'rip', 'static'], 'passive-interface': [], interface: [],
+    'copy running-config': ['startup-config'], 'copy startup-config': ['running-config'], 'show ip route': ['bgp', 'connected', 'ospf', 'rip', 'static'],
+    'if ip dhcp snooping': ['limit', 'trust'], 'config ip dhcp snooping': ['information', 'vlan'], 'switchport port-security mac-address': ['sticky'], login: ['local'],
+    // After a number or name, written as *: "access-list 10 permit", "standby 1 priority".
+    'access-list *': ['deny', 'permit', 'remark'], 'standby *': ['ip', 'preempt', 'priority', 'track'],
+    'channel-group *': ['mode'], 'channel-group * mode': ['active', 'auto', 'desirable', 'on', 'passive'],
+    'network *': ['mask'], 'network * *': ['area'], 'ipv6 ospf *': ['area'], 'ip access-group *': ['in', 'out'],
+    'ip nat inside source list *': ['interface', 'pool'], 'ip nat inside source list * interface *': ['overload'], 'ip nat inside source list * pool *': ['overload'],
+    'spanning-tree vlan *': ['priority', 'root'], 'spanning-tree vlan * root': ['primary', 'secondary'],
+    'neighbor *': ['default-originate', 'next-hop-self', 'remote-as', 'update-source'],
   };
+
+  // Every keyword above. Any other word in a phrase is a value and matches * in NEXT.
+  const VOCAB = new Set([...Object.values(FIRST), ...Object.values(NEXT)].flat());
+  const shape = (prev) => prev.map((w) => (VOCAB.has(w) ? w : '*')).join(' ');
+
+  // Words that take nothing after them, so "ip ro 0.0.0.0 ..." means route, not routing.
+  const NO_ARGS = new Set(['routing', 'unicast-routing', 'domain-lookup', 'nonegotiate', 'portfast', 'preempt']);
+
+  // The keywords allowed after `prev` (already expanded, without a leading "no"), or null
+  // when the next word is a value.
+  function choices(mode, prev) {
+    if (!prev.length) return FIRST[mode] || [];
+    const scope = mode === 'config-if' || mode === 'config-subif' ? 'if' : 'config';
+    const phrase = prev.join(' ');
+    const sh = shape(prev);
+    return NEXT[`${scope} ${phrase}`] || NEXT[phrase] || NEXT[`${scope} ${sh}`] || NEXT[sh] || null;
+  }
+
+  const startsWith = (list, w) => (list || []).filter((x) => x.toLowerCase().startsWith(w.toLowerCase()));
+
+  // Settles an abbreviation that fits more than one keyword the way a student means it: by
+  // the word after it ("log sync" is logging synchronous), then by which takes arguments.
+  function settle(mode, prev, hits, next) {
+    if (!next) return null;
+    const fit = hits.filter((h) => startsWith(choices(mode, [...prev, h]), next).length);
+    if (fit.length === 1) return fit[0];
+    const args = hits.filter((h) => !NO_ARGS.has(h));
+    return args.length === 1 ? args[0] : null;
+  }
 
   // Real IOS commands outside what PatchLab models: accepted as valid but not applied.
   const NOT_SIMULATED = /^(no )?(snmp-server|ntp|logging|cdp|clock|lldp|vtp|aaa|archive|errdisable|mls|power|boot|license|monitor|privilege|alias|key|track|object-group|class-map|policy-map|ip sla|ip ftp|ip tftp|ip scp|ip name-server|security|login|memory|vrf|udld|storm-control|speed|duplex|mdix|cdp|lldp|keepalive|bandwidth|delay|mtu|ip mtu|ip ospf|ip split-horizon|ip summary-address|ip rip|ip pim|ip igmp|ip verify|ip arp|arp|mac|exec-timeout)\b/i;
 
-  const IF_WORDS = new Set(['interface', 'passive-interface', 'update-source']);
+  const IF_WORDS = new Set(['interface', 'interfaces', 'passive-interface', 'update-source']);
 
   // Expands IOS abbreviations: "conf t", "int g0/1", "sh ip int br", "no shut".
   function expand(mode, line) {
     const words = line.trim().split(/\s+/).filter(Boolean);
     if (!words.length) return { line: '' };
-    const sub = mode === 'config-if' || mode === 'config-subif';
     const out = [];
     let negate = false;
     for (let i = 0; i < words.length; i++) {
       const w = words[i];
       const lw = w.toLowerCase();
-      let list;
       const prev = out.slice(negate ? 1 : 0);
-      if (!prev.length) list = mode === 'priv' && negate ? [] : FIRST[mode];
-      else {
-        const phrase = prev.join(' ');
-        const scoped = `${sub ? 'if' : 'config'} ${phrase}`;
-        list = NEXT[scoped] || NEXT[phrase] || null;
-        if (!list && prev[0] === 'show') list = null;
-      }
+      const list = !prev.length && mode === 'priv' && negate ? [] : choices(mode, prev);
       if (i === 0 && lw === 'no' && mode !== 'user' && mode !== 'priv') {
         out.push('no');
         negate = true;
@@ -97,8 +127,9 @@
         continue;
       }
       const exact = list.find((x) => x.toLowerCase() === lw);
-      const hits = exact ? [exact] : list.filter((x) => x.toLowerCase().startsWith(lw));
-      if (hits.length === 1) out.push(hits[0]);
+      const hits = exact ? [exact] : startsWith(list, lw);
+      const pick = hits.length === 1 ? hits[0] : hits.length > 1 ? settle(mode, prev, hits, words[i + 1]) : null;
+      if (pick) out.push(pick);
       else if (hits.length > 1) return { error: `% Ambiguous command:  "${line.trim()}"` };
       else if (!prev.length) return { error: invalid(line, w) };
       else out.push(w);
@@ -434,8 +465,6 @@
     return prompt(name, ctx.session.mode, false);
   }
 
-  const help = (mode) => (FIRST[mode] || []).map((w) => `  ${w}`).join('\n');
-
   // Runs one line on a device. `ctx` carries the target and practice state plus the per-device
   // session ({ mode, cur }); the practice state is updated in place when configuration changes.
   function exec(ctx, devId, raw) {
@@ -448,7 +477,7 @@
     const dev = store.devices[devId];
     const line = raw.trim();
     if (!line) return { out: '' };
-    if (line === '?' || line.endsWith(' ?')) return { out: help(ses.mode) };
+    if (line.endsWith('?')) return { out: help(ses.mode, raw.trimStart(), d) };
     const mode = ses.mode;
     const cfgMode = mode !== 'user' && mode !== 'priv';
     // In a sub-mode, a global command drops back to global configuration first, as IOS does.
@@ -679,19 +708,78 @@
     return { out: invalid(cmd, cmd.split(' ')[0]) };
   }
 
-  // Tab completion for the last word.
-  function complete(mode, line) {
+  // ---------- Tab completion and ? help ----------
+
+  const HOST_WORDS = ['help', 'ipconfig', 'ipv6config', 'ping'];
+
+  // The interface names a device has: its ports, plus the virtual ones it may create.
+  function ifTypes(d) {
+    const ports = MODELS[d.model].ports;
+    const virt = [...(M.canRoute(d) ? ['Loopback'] : []), ...(M.isSwitch(d) ? ['Vlan'] : []), 'Port-channel'];
+    return { ports, types: [...new Set([...ports.map((n) => /^[A-Za-z-]+/.exec(n)[0]), ...virt])] };
+  }
+
+  const common = (list) => list.reduce((a, b) => { let i = 0; while (i < a.length && a[i] === b[i]) i++; return a.slice(0, i); });
+
+  // "gig" becomes "GigabitEthernet0/" when every Gigabit port starts 0/; "g0/1" becomes
+  // "GigabitEthernet0/1 " once it names one port. Returns null when nothing fits.
+  function completeIf(frag, d) {
+    const { ports, types } = ifTypes(d);
+    const [, word, rest] = /^([A-Za-z-]*)(.*)$/.exec(frag);
+    if (!word) return null;
+    const hits = startsWith(types, word);
+    if (hits.length !== 1) return null;
+    const full = hits[0] + rest;
+    const names = ports.filter((n) => n.startsWith(full));
+    if (names.length === 1) return `${names[0]} `;
+    return names.length ? common(names) : full;
+  }
+
+  // Tab completion for the last word, as IOS does it: a word that fits one keyword (or one
+  // interface on this device) is written out in full; otherwise the line is left alone.
+  function complete(mode, line, d) {
+    if (d && M.isHost(d)) {
+      const hits = /^\S*$/.test(line) ? startsWith(HOST_WORDS, line) : [];
+      return hits.length === 1 ? `${hits[0]} ` : line;
+    }
     const words = line.split(/\s+/);
     const last = words.pop();
     const typed = words.filter(Boolean);
+    if (!last) return line;
     const exp = typed.length ? expand(mode, typed.join(' ')) : { line: '' };
     if (exp.error) return line;
-    const prev = exp.line ? exp.line.split(' ').filter((w) => w !== 'no' || typed[0] !== 'no') : [];
-    const sub = mode === 'config-if' || mode === 'config-subif';
-    const list = !prev.length ? FIRST[mode] : NEXT[`${sub ? 'if' : 'config'} ${prev.join(' ')}`] || NEXT[prev.join(' ')] || [];
-    const hits = (list || []).filter((x) => x.toLowerCase().startsWith((last || '').toLowerCase()));
-    const head = typed[0] === 'no' ? ['no', ...prev] : prev;
-    return hits.length === 1 ? `${[...head, hits[0]].join(' ')} ` : line;
+    let prev = exp.line ? exp.line.split(' ') : [];
+    const neg = prev[0] === 'no' && mode !== 'user' && mode !== 'priv';
+    if (neg) prev = prev.slice(1);
+    // "do" runs an exec command from configuration mode.
+    if (prev[0] === 'do' && mode !== 'user' && mode !== 'priv') return `do ${complete('priv', line.replace(/^\s*\S+\s*/, ''), d)}`;
+    const head = neg ? ['no', ...prev] : prev;
+    const hits = startsWith(choices(mode, prev), last);
+    if (hits.length === 1) return `${[...head, hits[0]].join(' ')} `;
+    if (!hits.length && d && IF_WORDS.has(prev[prev.length - 1])) {
+      const name = completeIf(last, d);
+      if (name) return [...head, name].join(' ');
+    }
+    return line;
+  }
+
+  // "?" on its own lists what may come first; "show ?" what may follow show; "sh?" the words
+  // starting sh.
+  function help(mode, line, d) {
+    const body = line.replace(/\?$/, '');
+    const partial = !/(^|\s)$/.test(body);
+    const words = body.trim().split(/\s+/).filter(Boolean);
+    const last = partial ? words.pop() : '';
+    const exp = words.length ? expand(mode, words.join(' ')) : { line: '' };
+    if (exp.error) return exp.error;
+    let prev = exp.line ? exp.line.split(' ') : [];
+    if (prev[0] === 'no' && mode !== 'user' && mode !== 'priv') prev = prev.slice(1);
+    if (prev[0] === 'do' && mode !== 'user' && mode !== 'priv') return help('priv', line.replace(/^\s*\S+\s*/, ''), d);
+    let list = choices(mode, prev);
+    if (d && IF_WORDS.has(prev[prev.length - 1])) list = [...(list || []), ...ifTypes(d).types];
+    if (!list || !list.length) return prev.length ? '  <value>\n  <cr>' : '% Unrecognized command';
+    const hits = startsWith(list, last);
+    return hits.length ? hits.slice().sort().map((w) => `  ${w}`).join('\n') : '% Unrecognized command';
   }
 
   PL.practice = { expand, exec, promptFor, buildStudent, score, fixCommands, prompt, complete, serialize, applyLine };

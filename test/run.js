@@ -945,6 +945,35 @@ test('CLI lab: abbreviations, modes, validation and show commands', () => {
   assert((run2.match(/ip address/g) || []).length === 1, 'a second ip address replaces the first');
 });
 
+test('CLI lab: common shortcuts, Tab completion of commands and interfaces, and ? help', () => {
+  [['priv', 'copy run start', 'copy running-config startup-config'], ['priv', 'wr mem', 'write memory'],
+    ['config', 'ip ro 0.0.0.0 0.0.0.0 10.0.0.1', 'ip route 0.0.0.0 0.0.0.0 10.0.0.1'], ['config', 'ip routing', 'ip routing'],
+    ['config', 'acc 10 per any', 'access-list 10 permit any'], ['config-line', 'log sync', 'logging synchronous'],
+    ['config-if', 'stand 1 pri 110', 'standby 1 priority 110'], ['config-if', 'chan 1 mo act', 'channel-group 1 mode active'],
+    ['config-router', 'net 10.0.0.0 0.0.0.255 ar 0', 'network 10.0.0.0 0.0.0.255 area 0'],
+    ['config', 'ip nat ins so li 1 int g0/0 over', 'ip nat inside source list 1 interface GigabitEthernet0/0 overload'],
+  ].forEach(([mode, typed, full]) => assert.equal(P.expand(mode, typed).line, full, typed));
+  const t = sample('stick');
+  const sw = named(t, 'SW1');
+  const r1 = named(t, 'R1');
+  assert.equal(P.complete('priv', 'conf', r1), 'configure ');
+  assert.equal(P.complete('priv', 'conf t', r1), 'configure terminal ');
+  assert.equal(P.complete('config', 'int gig', sw), 'interface GigabitEthernet0/');
+  assert.equal(P.complete('config', 'int fa', sw), 'interface FastEthernet0/');
+  assert.equal(P.complete('config', 'int fa0/24', sw), 'interface FastEthernet0/24 ', 'one port: written out with a space');
+  assert.equal(P.complete('config', 'int fa0/1', sw), 'interface FastEthernet0/1', 'fa0/1 could still be fa0/10');
+  assert.equal(P.complete('config', 'int vl', sw), 'interface Vlan');
+  assert.equal(P.complete('config', 'no int g0/0', r1), 'no interface GigabitEthernet0/0 ');
+  assert.equal(P.complete('config', 'do sh ip int b', r1), 'do show ip interface brief ');
+  assert.equal(P.complete('priv', 'co', r1), 'co', 'ambiguous: left alone');
+  assert.equal(P.complete('user', 'ipc', named(t, 'PC1')), 'ipconfig ');
+  const ctx = { target: t, practice: { devices: {}, hosts: {} }, session: { mode: 'priv', cur: null } };
+  assert.equal(P.exec(ctx, r1.id, 'conf ?').out, '  terminal');
+  assert(/^  bgp\n  connected/.test(P.exec(ctx, r1.id, 'sh ip ro ?').out));
+  ctx.session.mode = 'config';
+  assert(P.exec(ctx, sw.id, 'int ?').out.includes('  GigabitEthernet'));
+});
+
 test('CLI lab: router ports start shut, VLANs must exist, scoring and exact fixes', () => {
   const target = sample('stick');
   const practice = { devices: {}, hosts: {} };
