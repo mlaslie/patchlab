@@ -39,6 +39,12 @@ run() {
   if [ -z "${DRY_RUN:-}" ]; then "$@"; fi
 }
 
+# Like run, but keeps gcloud's own output quiet.
+runq() {
+  echo "+ $*"
+  if [ -z "${DRY_RUN:-}" ]; then "$@" >/dev/null; fi
+}
+
 ask() {
   local key="$1" label="$2" def="$3" answer
   read -r -p "$label [$def]: " answer || true
@@ -100,7 +106,13 @@ if [ -z "${DRY_RUN:-}" ] && gcloud iam service-accounts describe "$SA_EMAIL" "$P
 else
   run gcloud iam service-accounts create "$SERVICE_ACCOUNT" --display-name="PatchLab on Cloud Run" "$P"
 fi
-run gcloud storage buckets add-iam-policy-binding "gs://$BUCKET" --member="serviceAccount:$SA_EMAIL" --role=roles/storage.objectUser "$P"
+# A new service account takes a few seconds to be usable everywhere, so retry briefly.
+for try in 1 2 3 4 5 6; do
+  if runq gcloud storage buckets add-iam-policy-binding "gs://$BUCKET" --member="serviceAccount:$SA_EMAIL" --role=roles/storage.objectUser "$P"; then break; fi
+  [ "$try" = 6 ] && { echo "Could not give $SA_EMAIL access to the bucket."; exit 1; }
+  echo "   Waiting for the new service account to be ready..."
+  sleep 10
+done
 
 echo
 read -r -p "Build and deploy to Cloud Run now? [Y/n]: " dep || true
@@ -133,8 +145,8 @@ for u in "${users[@]:-}"; do
   [ -n "$u" ] || continue
   case "$u" in *:*) member="$u" ;; *) member="user:$u" ;; esac
   # One refused address (an organization policy, say) should not stop the others.
-  run gcloud iap web add-iam-policy-binding --resource-type=cloud-run --service="$SERVICE" --region="$REGION" \
-    --member="$member" --role=roles/iap.httpsResourceAccessor --condition=None "$P" >/dev/null \
+  runq gcloud iap web add-iam-policy-binding --resource-type=cloud-run --service="$SERVICE" --region="$REGION" \
+    --member="$member" --role=roles/iap.httpsResourceAccessor --condition=None "$P" \
     || echo "   Could not give $u access. See the message above."
 done
 echo "Accounts outside your organization (gmail.com, for example) also need the OAuth consent"

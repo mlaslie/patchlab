@@ -97,7 +97,15 @@ Write-Host '== Service account'
 & gcloud iam service-accounts describe $SA $P *> $null
 if (-not $DryRun -and $LASTEXITCODE -eq 0) { Write-Host "$SA already exists; keeping it." }
 else { Run iam service-accounts create $C.SERVICE_ACCOUNT '--display-name=PatchLab on Cloud Run' $P }
-Run storage buckets add-iam-policy-binding "gs://$($C.BUCKET)" "--member=serviceAccount:$SA" --role=roles/storage.objectUser $P
+# A new service account takes a few seconds to be usable everywhere, so retry briefly.
+foreach ($try in 1..6) {
+  try { Run storage buckets add-iam-policy-binding "gs://$($C.BUCKET)" "--member=serviceAccount:$SA" --role=roles/storage.objectUser $P; break }
+  catch {
+    if ($try -eq 6) { Write-Host "Could not give $SA access to the bucket."; exit 1 }
+    Write-Host '   Waiting for the new service account to be ready...'
+    Start-Sleep -Seconds 10
+  }
+}
 
 if ((Read-Host 'Build and deploy to Cloud Run now? [Y/n]') -match '^(n|no)$') { Write-Host 'Skipped. Deploy later by running this script again.'; exit 0 }
 
