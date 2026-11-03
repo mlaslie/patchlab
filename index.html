@@ -64,6 +64,7 @@
     <div class="brand"><span class="brand-mark" aria-hidden="true"></span>PatchLab</div>
     <nav class="views" role="tablist" aria-label="Page">
       <button type="button" role="tab" data-view="design" aria-selected="true">Designer</button>
+      <button type="button" role="tab" data-view="cli" aria-selected="false">CLI lab</button>
       <button type="button" role="tab" data-view="tools" aria-selected="false">Tools</button>
     </nav>
     <input id="lab-name" class="lab-name" aria-label="Lab name" spellcheck="false">
@@ -122,6 +123,8 @@
     <div class="panel-body" id="panel-body"></div>
   </aside>
 
+  <main class="cli-page" id="cli-page" aria-label="CLI lab" hidden></main>
+
   <main class="tools-page" id="tools-page" aria-label="Tools" hidden>
     <div class="tools-inner" id="tools-body"></div>
   </main>
@@ -171,10 +174,13 @@
 <script src="js/export.js"></script>
 <script src="js/guide.js"></script>
 <script src="js/importer.js"></script>
+<script src="js/practice.js"></script>
+<script src="js/troubleshoot.js"></script>
 <script src="js/validate.js"></script>
 <script src="js/samples.js"></script>
 <script src="js/canvas.js"></script>
 <script src="js/inspector.js"></script>
+<script src="js/cliview.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

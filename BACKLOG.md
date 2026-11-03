@@ -37,3 +37,10 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` done.
   that decided each step.
 - [x] **Topology export.** Canvas to SVG and PNG; lab to a Cisco Modeling Labs (CML) YAML file with
   the generated configs.
+
+## Practice
+
+- [x] **CLI lab.** Configure every device from a simulated IOS console, starting from factory
+  defaults, scored against the designed lab's end-to-end reachability.
+- [x] **Ask PatchLab.** Plain-English troubleshooting questions answered with the likely cause,
+  more detail on request, and fix commands per device.

@@ -419,6 +419,8 @@
     p.settings = { ...base.settings, ...(p.settings || {}) };
     p.vlans = p.vlans || base.vlans;
     p.links = p.links || [];
+    // What a student typed in the CLI lab, per device. Kept with the lab so it saves and reopens.
+    p.practice = p.practice && p.practice.devices ? { devices: p.practice.devices, hosts: p.practice.hosts || {} } : { devices: {}, hosts: {} };
     p.devices = (p.devices || []).filter((d) => MODELS[d.model]);
     p.devices.forEach((d) => {
       d.ports = d.ports || {};

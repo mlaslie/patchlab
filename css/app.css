@@ -358,3 +358,59 @@ pre.cli .typed { font-weight: 600; }
   .tools-inner { padding: 14px 16px 40px; }
 }
 .tools-page dl.fact dd { min-width: 0; overflow-wrap: anywhere; }
+
+/* CLI lab */
+#app.view-cli { grid-template: "top" auto "cli" minmax(0, 1fr) / minmax(0, 1fr); }
+#app.view-cli .palette, #app.view-cli .stage, #app.view-cli .panel { display: none; }
+.cli-page { grid-area: cli; min-height: 0; overflow: hidden; background: var(--bg); }
+.cli-layout { height: 100%; display: grid; grid-template-columns: 250px minmax(0, 1fr) 380px; gap: 12px; padding: 12px; box-sizing: border-box; }
+.cli-left, .cli-right { display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow-y: auto; }
+.cli-card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.cli-card .sect { gap: 8px; }
+.cli-devs { display: flex; flex-direction: column; gap: 2px; }
+.cli-dev { display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 8px; text-align: left; border: 1px solid transparent; background: transparent; border-radius: 5px; padding: 3px 6px; }
+.cli-dev:hover { background: var(--sunken); }
+.cli-dev.on { background: var(--accent-soft); border-color: var(--accent); }
+.cli-dev svg { width: 30px; height: 22px; color: var(--node-line); }
+.cli-dev span { display: flex; flex-direction: column; font-weight: 500; line-height: 1.2; }
+.cli-dev small { font-weight: 400; color: var(--muted); font-size: 12px; }
+.cli-dev i { font-style: normal; font: 500 11px var(--font-mono); color: var(--muted); }
+.cli-term { display: flex; flex-direction: column; gap: 8px; min-height: 0; min-width: 0; }
+.cli-term-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.cli-term-head b { font: 600 18px var(--font-label); }
+.term { flex: 1 1 auto; min-height: 200px; margin: 0; overflow: auto; background: var(--cli-bg); color: var(--cli-fg); font: 13px/1.45 var(--font-mono); padding: 12px 14px; border-radius: 8px 8px 0 0; white-space: pre-wrap; word-break: break-word; }
+.term-in { display: flex; align-items: center; gap: 0; background: var(--cli-bg); border-radius: 0 0 8px 8px; padding: 0 14px 12px; margin-top: -8px; font: 13px var(--font-mono); }
+.term-in .prompt { color: var(--cli-key); white-space: nowrap; }
+.term-in input { flex: 1; min-width: 0; background: transparent; border: 0; color: var(--cli-fg); font: inherit; padding: 4px 0 4px 2px; outline: none; caret-color: var(--cli-val); }
+.meter { height: 6px; background: var(--sunken); border-radius: 3px; overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--good); border-radius: 3px; }
+.cell.blocked { background: var(--sunken); color: var(--muted); }
+.cell.extra { background: var(--warn-soft); color: var(--warn); }
+.cli-notes { margin: 0; padding-left: 18px; font-size: 13px; color: var(--warn); }
+#dlg-topo-body svg { width: 100%; height: auto; max-height: 70vh; }
+@media (max-width: 1100px) { .cli-layout { grid-template-columns: 210px minmax(0, 1fr) 320px; } }
+@media (max-width: 860px) {
+  .cli-page { overflow-y: auto; }
+  .cli-layout { height: auto; grid-template-columns: minmax(0, 1fr); padding: 12px 16px 40px; }
+  .cli-left, .cli-right { overflow: visible; }
+  .term { min-height: 320px; max-height: 60vh; }
+}
+
+/* Ask PatchLab */
+.ask-row { display: flex; gap: 6px; }
+.ask-row input { flex: 1; min-width: 0; border: 1px solid var(--line-strong); background: var(--surface); border-radius: 4px; padding: 5px 8px; }
+.ts-answer { border-left: 3px solid var(--line-strong); padding: 2px 0 2px 10px; display: flex; flex-direction: column; gap: 4px; }
+.ts-answer.ok { border-color: var(--good); }
+.ts-answer.no { border-color: var(--bad); }
+.ts-q { margin: 0; color: var(--muted); font-size: 13px; font-style: italic; }
+.ts-summary { margin: 0; line-height: 1.45; }
+.ts-opts { display: flex; flex-direction: column; gap: 4px; }
+.ts-opt { display: flex; align-items: center; gap: 8px; text-align: left; border: 1px solid var(--line); background: var(--surface); border-radius: 5px; padding: 5px 8px; font-weight: 500; }
+.ts-opt:hover { border-color: var(--accent); color: var(--accent); }
+.ts-opt.on { border-color: var(--accent); background: var(--accent-soft); }
+.ts-opt span { width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font: 600 12px var(--font-ui); display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.ts-fixes { display: flex; flex-direction: column; gap: 8px; }
+.ts-dev { font-weight: 600; margin-bottom: 3px; }
+.ts-checks { margin: 0; padding-left: 18px; }
+.ts-checks code { font: 12px var(--font-mono); }
+.ts-more pre, .ts-fix pre { margin: 0; }

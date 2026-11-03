@@ -1357,8 +1357,42 @@
       return `<div class="sect"><div class="sect-head"><h3>Configuration checks</h3>${tally}</div>${items}</div>`;
     }
 
+    // ---------- Ask PatchLab ----------
+
+    // The assistant box: a question, the answer, and three numbered follow-ups. Typing 1, 2
+    // or 3 into the box picks the matching follow-up.
+    function askSection(state, context, onTrace) {
+      const run = (text) => {
+        const t = String(text || '').trim();
+        if (!t) return;
+        if (state.a && /^[123]$/.test(t)) return follow(+t);
+        state.q = t;
+        state.a = PL.troubleshoot.ask(context(), t);
+        state.view = 'summary';
+      };
+      const follow = (n) => {
+        if (n === 1) { state.a = null; state.q = ''; state.focus = true; }
+        if (n === 2) state.view = state.view === 'more' ? 'summary' : 'more';
+        if (n === 3) state.view = state.view === 'fix' ? 'summary' : 'fix';
+      };
+      const a = state.a;
+      const opt = (n, label, on) => `<button type="button" class="ts-opt${on ? ' on' : ''}" data-a="${act(() => { follow(n); App.renderPanel(); })}"><span>${n}</span>${esc(label)}</button>`;
+      const box = input(state.a ? '' : state.q, (v) => { run(v); App.ui.skipCommit = true; }, { ph: a ? 'Type 1, 2 or 3, or ask another question' : "Why can't PC1 ping PC2?", label: 'Ask a question' });
+      return `<div class="sect ask"><div class="sect-head"><h3>Ask PatchLab</h3></div>
+        <div class="ask-row">${box}${btn('Ask', () => { const el = root.querySelector('.ask input'); run(el && el.value); App.renderPanel(); }, 'primary')}</div>
+        ${a ? `${PL.troubleshoot.render(a, state.view)}
+          <div class="ts-opts">${opt(1, 'Ask another question')}${opt(2, 'More troubleshooting info about this problem', state.view === 'more')}${opt(3, 'Show me the suggested changes', state.view === 'fix')}
+          ${a.trace && onTrace ? `<button type="button" class="ts-opt" data-a="${act(() => onTrace(a.trace))}"><span>⤳</span>Show the path on the canvas</button>` : ''}</div>`
+          : '<p class="note">Ask in plain words: "why can\'t Staff1 reach WEB1 on port 80?", "why doesn\'t PC3 get an address?", "why aren\'t R1 and R2 OSPF neighbors?" or "what\'s wrong with my lab?"</p>'}</div>`;
+    }
+
     function verifyView() {
-      return `${issueSection()}${matrixSection()}${pingSection()}<p class="note">These results come from PatchLab's model of the configuration, so they predict behaviour rather than run IOS. Confirm on real gear with ping, show ip route and show interfaces trunk.</p>`;
+      const ask = askSection(App.ui.ts, () => ({ p: App.project, sim: App.sim, issues: App.issues, cli: false }), (trace) => {
+        App.trace = trace;
+        App.renderAll();
+        App.canvas.animate(trace);
+      });
+      return `${ask}${issueSection()}${matrixSection()}${pingSection()}<p class="note">These results come from PatchLab's model of the configuration, so they predict behaviour rather than run IOS. Confirm on real gear with ping, show ip route and show interfaces trunk.</p>`;
     }
 
     // ---------- Tools view ----------
@@ -1511,6 +1545,11 @@
         const el = document.getElementById(focusId);
         if (el) el.focus();
       }
+      const asked = root.querySelector('.ask input');
+      if (asked && (App.ui.ts.focus || (App.ui.ts.a && focusId))) {
+        asked.focus();
+        App.ui.ts.focus = false;
+      }
     }
 
     const onChange = (e) => {
@@ -1540,7 +1579,7 @@
       App.renderPanel();
     });
 
-    return { render };
+    return { render, askSection };
   }
 
   PL.inspector = { create };

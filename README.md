@@ -13,7 +13,10 @@ It covers what I'd expect from a CCNA-level lab:
 - port security and DHCP snooping
 - IPv6 with SLAAC and OSPFv3
 
-It also has IPv4 and IPv6 subnet calculators, a VLSM planner, a step-by-step build guide, a printable answer sheet, config
+There's a CLI lab mode where students configure every device from a simulated console and get
+scored against the lab as designed, and an assistant that answers questions like "why can't PC1
+ping PC2?" in plain English, with the fix commands for each device. It also has IPv4 and IPv6
+subnet calculators, a VLSM planner, a step-by-step build guide, a printable answer sheet, config
 import from `show running-config`, and export to Cisco Modeling Labs.
 
 It's a single page of plain HTML, CSS and JavaScript, with no framework, no backend and nothing
@@ -131,6 +134,21 @@ change, run `npm run build` and the `gcloud run deploy` line again.
 12. **Tools** (top bar, beside **Designer**) opens a full-width page with an IPv4 subnet calculator and VLSM planner (which can write subnets into the
    VLAN list), an IPv6 prefix calculator that splits a block into numbered subnets, the step-by-step build guide with a check after each step, and exports: SVG and
    PNG drawings, a printable answer sheet, and a Cisco Modeling Labs topology file.
+13. **CLI lab** (top bar) turns the designed lab into an exercise. Every device starts at
+   factory defaults with only its cables, and each has a console: IOS modes, abbreviations
+   (`conf t`, `int g0/1`, `no shut`), Tab completion, `?`, history, `show` commands, `| include`
+   and `ping`; PCs take `ipconfig` and `ping`. Router interfaces and SVIs stay shut until
+   `no shutdown`, and an access port in a VLAN the switch never created stays inactive, as on real
+   gear. The score compares every host pair with the designed lab: what should work, and what
+   should stay blocked. The lab brief lists each device's cables and addresses. What students
+   type saves with the lab file.
+14. **Ask PatchLab** (Verify tab, and in the CLI lab) takes plain questions: "why can't PC1 ping
+   PC2?", "can Staff1 reach WEB1 on port 80?", "why doesn't PC3 get an address?", "why aren't R1
+   and R2 OSPF neighbors?", "what's wrong with my lab?". It runs the test and names the cause,
+   such as "The mask on R1 interface Gi0/0 is /24, but R2 uses /30". Then pick 1 to ask another
+   question, 2 for more troubleshooting detail (the hop-by-hop trace, related problems and the
+   `show` commands to confirm on real gear), or 3 for the commands that fix it on each device.
+   In the CLI lab, the fixes are the exact differences from the designed lab.
 
 | Key | Action |
 | --- | --- |
@@ -184,6 +202,9 @@ js/subnet.js      IPv4 and IPv6 subnet calculators, VLSM planner
 js/export.js      SVG drawing and Cisco Modeling Labs export
 js/guide.js       build guide and answer sheet
 js/importer.js    show running-config import
+js/practice.js    CLI lab console, student lab and scoring
+js/troubleshoot.js  question answering and fix suggestions
+js/cliview.js     CLI lab page
 js/validate.js    configuration checks and fix advice
 js/samples.js     worked example labs
 js/canvas.js      SVG canvas, drag, pan, zoom, cabling

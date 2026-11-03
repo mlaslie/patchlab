@@ -816,6 +816,7 @@
         const chk = aclCheck(cur, ingress.aclIn, pkt);
         if (!chk.ok) {
           hop.fail = aclText(chk, ingress.aclIn, 'in', ingress.name);
+          hop.cause = { code: 'acl', acl: ingress.aclIn, dir: 'in', ifName: ingress.name, line: chk.line || 0, implicit: !!chk.implicit, pkt: { ...pkt } };
           return done(false, `${cur.name}: ${hop.fail}`);
         }
       }
@@ -829,11 +830,13 @@
       if (owns(cur)) return done(true, '', cur);
       const drop = sim.portSec.find((x) => x.dropped && x.dropped.includes(cur.id));
       if (!ingress && drop) {
+        hop.cause = { code: 'portsec', entry: drop };
         hop.fail = `Port security (${drop.violation}) on ${M.dev(p, drop.devId).name} ${shortName(drop.ifName)} drops frames from ${cur.name}.`;
         return done(false, hop.fail);
       }
       if (ingress && !M.canRoute(cur)) {
         hop.fail = `${cur.name} received the packet but does not route.`;
+        hop.cause = { code: 'notrouter' };
         return done(false, hop.fail);
       }
       let egress;
@@ -842,6 +845,7 @@
         const r = resolve(sim, cur.id, dstN);
         if (!r) {
           hop.fail = `No route to ${pkt.dst}.`;
+          hop.cause = { code: 'noroute', dst: pkt.dst, pkt: { ...pkt } };
           return done(false, `${cur.name} has no route to ${pkt.dst}.`);
         }
         egress = sim.byDev[cur.id].find((i) => i.name === r.ifName);
@@ -851,10 +855,12 @@
         egress = sim.byDev[cur.id].find((i) => i.ip && i.up) || sim.byDev[cur.id].find((i) => i.ip);
         if (!egress) {
           hop.fail = 'No IP address configured.';
+          hop.cause = { code: 'noaddr' };
           return done(false, `${cur.name} has no IP address.`);
         }
         if (!egress.up) {
           hop.fail = `${shortName(egress.name)} is down.`;
+          hop.cause = { code: 'down', iface: egress };
           return done(false, `${cur.name}: ${hop.fail}`);
         }
         if (N.inNet(pkt.dst, egress.net, egress.mask)) nhIp = pkt.dst;
@@ -862,6 +868,7 @@
           nhIp = gatewayOf(sim, cur);
           if (!nhIp) {
             hop.fail = 'No default gateway set.';
+            hop.cause = { code: 'nogw', iface: egress };
             return done(false, `${cur.name} has no default gateway, so it cannot reach ${pkt.dst}.`);
           }
         }
@@ -876,6 +883,7 @@
         const chk = aclCheck(cur, egress.aclOut, pkt);
         if (!chk.ok) {
           hop.fail = aclText(chk, egress.aclOut, 'out', egress.name);
+          hop.cause = { code: 'acl', acl: egress.aclOut, dir: 'out', ifName: egress.name, line: chk.line || 0, implicit: !!chk.implicit, pkt: { ...pkt } };
           return done(false, `${cur.name}: ${hop.fail}`);
         }
       }
@@ -883,6 +891,7 @@
         || sim.vips.find((i) => i.ip === nhIp && i.domain === egress.domain);
       if (!target) {
         hop.fail = `ARP for ${nhIp} gets no answer on ${shortName(egress.name)}.`;
+        hop.cause = { code: 'arp', nh: nhIp, iface: egress, dst: pkt.dst, route: hop.route || null };
         return done(false, `${cur.name}: ${hop.fail}`);
       }
       const path = l2Path(sim, egress.key, target.key);
@@ -893,6 +902,7 @@
       ingress = target;
       cur = target.dev;
     }
+    hops[hops.length - 1].cause = { code: 'loop' };
     return done(false, 'TTL expired. There is a routing loop.');
   }
 

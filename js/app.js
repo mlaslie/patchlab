@@ -22,6 +22,8 @@
       ping: { from: '', to: '', proto: 'icmp', port: 80 },
       routes: { view: 'table', proto: 'all' },
       stp: { vlan: null, view: 'table' },
+      ts: { q: '', a: null, view: 'summary' },
+      cli: { dev: null, sessions: {}, logs: {}, hist: {}, histAt: null, ts: { q: '', a: null, view: 'summary' } },
       toolTab: 'subnet',
       tools: {
         ip: '192.168.10.77', mask: '/26', base: '192.168.1.0/24', guideDev: '',
@@ -53,18 +55,22 @@
 
   App.renderPanel = () => App.inspector.render();
 
-  // The designer (palette, canvas, side panel) or the full-width Tools page.
+  // The designer (palette, canvas, side panel), the CLI lab, or the Tools page.
   App.setView = (v) => {
     App.view = v;
     document.getElementById('app').classList.toggle('view-tools', v === 'tools');
+    document.getElementById('app').classList.toggle('view-cli', v === 'cli');
     document.getElementById('tools-page').hidden = v !== 'tools';
+    document.getElementById('cli-page').hidden = v !== 'cli';
     document.querySelectorAll('.views [data-view]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.view === v)));
     App.renderAll();
+    if (v === 'cli') App.cli.focus();
   };
 
   App.renderAll = () => {
     App.canvas.render();
     App.inspector.render();
+    if (App.view === 'cli') App.cli.render();
     document.getElementById('btn-undo').disabled = !App.undo.length;
     document.getElementById('btn-redo').disabled = !App.redo.length;
     const name = document.getElementById('lab-name');
@@ -186,6 +192,8 @@
     const symbols = [...document.querySelectorAll('svg defs symbol')].map((x) => x.outerHTML).join('');
     return PL.exporter.standaloneSvg(App.project, App.canvas.exportMarkup(), symbols, title);
   }
+
+  App.topologySvg = topologySvg;
 
   App.exportSvg = () => App.download(`${baseName()}.svg`, topologySvg(App.project.name), 'image/svg+xml');
 
@@ -439,7 +447,7 @@
         e.preventDefault();
         return e.shiftKey ? redo() : undo();
       }
-      if (typing || App.view === 'tools') return;
+      if (typing || App.view !== 'design') return;
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         App.deleteSelection();
@@ -467,6 +475,7 @@
     analyse();
     App.canvas = PL.canvas.create(App);
     App.inspector = PL.inspector.create(App);
+    App.cli = PL.cliview.create(App);
     buildPalette();
     buildMenu();
     setupTheme();

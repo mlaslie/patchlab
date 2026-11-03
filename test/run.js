@@ -5,11 +5,11 @@ const vm = require('vm');
 const assert = require('assert');
 
 const root = path.join(__dirname, '..');
-['net', 'catalog', 'model', 'configgen', 'stp', 'simulate', 'ipv6', 'subnet', 'export', 'guide', 'importer', 'validate', 'samples'].forEach((f) => {
+['net', 'catalog', 'model', 'configgen', 'stp', 'simulate', 'ipv6', 'subnet', 'export', 'guide', 'importer', 'validate', 'samples', 'practice', 'troubleshoot'].forEach((f) => {
   vm.runInThisContext(fs.readFileSync(path.join(root, 'js', `${f}.js`), 'utf8'), { filename: `${f}.js` });
 });
 
-const { net: N, model: M, configgen: C, simulate: S, validate: V, samples, stp: STP, ipv6: V6, subnet: SUB, exporter: X, guide: G, importer: IMP } = globalThis.PL;
+const { net: N, model: M, configgen: C, simulate: S, validate: V, samples, stp: STP, ipv6: V6, subnet: SUB, exporter: X, guide: G, importer: IMP, practice: P, troubleshoot: T } = globalThis.PL;
 const sample = (id) => samples.find((s) => s.id === id).build();
 const named = (p, n) => p.devices.find((d) => d.name === n);
 const cfg = (p, n, o) => C.generate(p, named(p, n), { notes: false, ...o });
@@ -910,6 +910,111 @@ test('IPv6 subnet calculator and splitter', () => {
   assert.equal(odd.nibble, false);
   assert.equal(odd.rows[0].last, '2001:db8:3fff:ffff:ffff:ffff:ffff:ffff');
   assert(SUB.split6('2001:db8::/64', 48).error);
+});
+
+// Types lines into one device's console and returns the outputs.
+function typeInto(target, practice, devName, text) {
+  const d = named(target, devName);
+  const ctx = { target, practice, session: { mode: 'user', cur: null } };
+  return text.split('\n').map((l) => ({ prompt: P.promptFor(ctx, d.id), out: P.exec(ctx, d.id, l).out }));
+}
+
+test('CLI lab: abbreviations, modes, validation and show commands', () => {
+  assert.equal(P.expand('priv', 'conf t').line, 'configure terminal');
+  assert.equal(P.expand('priv', 'sh ip int br').line, 'show ip interface brief');
+  assert.equal(P.expand('config', 'int g0/0.10').line, 'interface GigabitEthernet0/0.10');
+  assert.equal(P.expand('config', 'int fa 0/1').line, 'interface FastEthernet0/1');
+  assert.equal(P.expand('config-if', 'no shut').line, 'no shutdown');
+  assert.equal(P.expand('config-if', 'sw mo tr').line, 'switchport mode trunk');
+  assert.equal(P.expand('config-if', 'sw tr all vl 10,20').line, 'switchport trunk allowed vlan 10,20');
+  assert(P.expand('priv', 'co').error, 'co is ambiguous between configure and copy');
+  const target = sample('stick');
+  const practice = { devices: {}, hosts: {} };
+  const out = typeInto(target, practice, 'R1', 'en\nconf t\nhostname R1\nint g0/9\nint g0/0\nno shut\nint g0/0.10\nencapsulation dot1q 10\nip add 192.168.10.1 255.255.255.0\nfrobnicate\nsnmp-server community x RO\nip route 0.0.0.0 0.0.0.0 192.168.10.254\nend\nsh ip int br | i 0/0');
+  assert.deepEqual(out.slice(0, 4).map((x) => x.prompt), ['Router>', 'Router#', 'Router(config)#', 'R1(config)#']);
+  assert(/Invalid interface/.test(out[3].out));
+  assert(/Invalid input/.test(out[9].out));
+  assert(/does not simulate/.test(out[10].out));
+  assert.equal(out[11].prompt, 'R1(config-subif)#', 'a global command typed in a sub-mode still applies');
+  assert(/GigabitEthernet0\/0\.10\s+192\.168\.10\.1\s+YES manual up/.test(out[13].out), out[13].out);
+  const run = P.serialize(practice.devices[named(target, 'R1').id].blocks).text;
+  assert(run.includes('ip route 0.0.0.0 0.0.0.0 192.168.10.254'));
+  typeInto(target, practice, 'R1', 'en\nconf t\nno ip route 0.0.0.0 0.0.0.0 192.168.10.254\nint g0/0.10\nip address 192.168.10.2 255.255.255.0');
+  const run2 = P.serialize(practice.devices[named(target, 'R1').id].blocks).text;
+  assert(!run2.includes('ip route'), 'no removes the route');
+  assert((run2.match(/ip address/g) || []).length === 1, 'a second ip address replaces the first');
+});
+
+test('CLI lab: router ports start shut, VLANs must exist, scoring and exact fixes', () => {
+  const target = sample('stick');
+  const practice = { devices: {}, hosts: {} };
+  let sc = P.score(target, P.buildStudent(target, practice));
+  assert.equal(sc.matched, 0);
+  target.devices.filter(M.isHost).forEach((h) => {
+    const c = h.ports.Ethernet0;
+    typeInto(target, practice, h.name, `ipconfig ${c.ip} ${c.mask} ${h.gateway}`);
+  });
+  typeInto(target, practice, 'R1', 'en\nconf t\nhostname R1\nint g0/0.10\nenc dot 10\nip add 192.168.10.1 255.255.255.0\nint g0/0.20\nenc dot 20\nip add 192.168.20.1 255.255.255.0\nint g0/0.99\nenc dot 99 native');
+  typeInto(target, practice, 'SW1', 'en\nconf t\nhostname SW1\nvlan 10\nname STUDENTS\nvlan 20\nname STAFF\nvlan 99\nname NATIVE\nint g0/1\nsw mo tr\nsw tr nat vl 99\nsw tr all vl 10,20,99\nint range fa0/1-2');
+  ['FastEthernet0/1', 'FastEthernet0/2'].forEach((n) => typeInto(target, practice, 'SW1', `en\nconf t\nint ${n}\nsw mo acc\nsw acc vl 10`));
+  typeInto(target, practice, 'SW1', 'en\nconf t\nint fa0/3\nsw acc vl 20');
+  let student = P.buildStudent(target, practice);
+  sc = P.score(target, student);
+  assert.equal(sc.matched, 2, 'only PC1 and PC2, in the same VLAN, reach each other while the router port is shut');
+  const fix = P.fixCommands(target, student, named(target, 'R1').id, practice);
+  assert(fix.includes('interface GigabitEthernet0/0') && fix.includes(' no shutdown'), fix.join('|'));
+  const a = T.ask({ p: student, sim: S.simulate(student), issues: [], cli: true }, 'why cant pc1 ping staff1');
+  assert(/R1 Gi0\/0 is administratively down/.test(a.summary), a.summary);
+  typeInto(target, practice, 'R1', 'en\nconf t\nint g0/0\nno shut');
+  student = P.buildStudent(target, practice);
+  sc = P.score(target, student);
+  assert(sc.done, JSON.stringify(sc.cells.filter((c) => !c.match)));
+  // A VLAN the switch never created leaves its access ports inactive.
+  typeInto(target, practice, 'SW1', 'en\nconf t\nno vlan 20');
+  student = P.buildStudent(target, practice);
+  assert(student.practiceNotes.some((n) => /VLAN 20, which SW1 has not created/.test(n)));
+  assert(!P.score(target, student).done);
+});
+
+test('Troubleshooting assistant: parses questions and names the cause and fix', () => {
+  const p0 = sample('campus');
+  const q = T.parseQuestion(p0, "why can't pc 1 reach web1 on http?");
+  assert.deepEqual([q.kind, q.mentions.map((m) => m.dev.name), q.service.port], ['ping', ['PC1', 'WEB1'], 80]);
+  assert.equal(T.parseQuestion(p0, 'why does PC2 not get an address').kind, 'dhcp');
+  assert.equal(T.parseQuestion(p0, "why aren't R1 and CORE1 OSPF neighbors").kind, 'ospf');
+  const ask = (p, text) => {
+    const sim = S.simulate(p);
+    return T.ask({ p, sim, issues: V.validate(p, sim) }, text);
+  };
+  // A wrong mask on the router side of a point-to-point link.
+  const p = sample('rip');
+  const r1 = named(p, 'R1');
+  const l = M.linksOf(p, r1.id).find((x) => M.dev(p, M.peerOf(x, r1.id)).name === 'R2');
+  M.port(r1, M.endIf(l, r1.id)).mask = '255.255.255.0';
+  let a = ask(p, "why can't R1 ping R2");
+  assert(/The mask on R1 interface Gi0\/0 is \/24 \(255\.255\.255\.0\), but R2 uses \/30/.test(a.summary), a.summary);
+  assert.deepEqual(a.fixes, [{ device: 'R1', lines: ['interface GigabitEthernet0/0', ' ip address 10.0.12.1 255.255.255.252'] }]);
+  // A host gateway typo.
+  const s = sample('stick');
+  named(s, 'PC1').gateway = '192.168.10.254';
+  a = ask(s, 'pc1 cannot ping staff1');
+  assert(/nothing on its segment has that address/.test(a.summary));
+  assert(/default gateway 192\.168\.10\.1$/.test(a.fixes[0].lines[0]));
+  // A trunk that leaves a VLAN out.
+  const t = sample('stick');
+  M.linksOf(t, named(t, 'R1').id)[0].allowed = '10,99';
+  a = ask(t, 'why cant staff1 ping pc1');
+  assert(/does not allow VLAN 20/.test(a.summary));
+  assert(a.fixes.some((f) => f.lines.includes(' switchport trunk allowed vlan add 20')));
+  // An ACL drop gets a permit placed above the deny.
+  const c = sample('campus');
+  const m = S.matrix(S.simulate(c));
+  const blocked = m.rows.flatMap((row, i) => row.map((x, j) => (x && !x.ok ? [m.hosts[i], m.hosts[j]] : null))).find(Boolean);
+  a = ask(c, `why can't ${blocked[0].name} ping ${blocked[1].name}`);
+  assert(/ACL/.test(a.summary) && /working as designed/.test(a.summary), a.summary);
+  assert(/^ \d+ permit icmp host /.test(a.fixes[0].lines[1]), a.fixes[0].lines.join('|'));
+  a = ask(sample('stick'), 'can pc1 ping pc2');
+  assert(a.ok && /It works/.test(a.summary));
 });
 
 tests.forEach(([name, fn]) => {
