@@ -58,6 +58,8 @@ button { cursor: pointer; }
 .views button { border: 0; background: transparent; padding: 4px 12px; font-weight: 500; }
 .views button + button { border-left: 1px solid var(--line-strong); }
 .views button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
+.who { margin-left: auto; font-size: 12.500px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 32ch; }
+.who + .top-actions { margin-left: 12px; }
 .top-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; }
 .sep { width: 1px; height: 20px; background: var(--line); margin: 0 2px; }
 .btn { border: 1px solid var(--line-strong); background: var(--surface); padding: 5px 10px; border-radius: 4px; font-weight: 500; white-space: nowrap; }

@@ -1,7 +1,7 @@
 # Only the container inputs go to Cloud Build.
 *
 !Dockerfile
-!deploy/
-!deploy/**
+!server/
+!server/server.js
 !dist/
 !dist/patchlab.html

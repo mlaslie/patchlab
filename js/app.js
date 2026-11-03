@@ -4,7 +4,7 @@
 
   const { MODELS, PALETTE } = PL.catalog;
   const M = PL.model;
-  const STORE = 'patchlab.project.v1';
+  let STORE = 'patchlab.project.v1';
   const THEME = 'patchlab.theme';
 
   const App = {
@@ -40,6 +40,54 @@
     get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
     set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage is a convenience here */ } },
   };
+
+  // ---------- Per-user storage behind IAP ----------
+
+  // When the page is served by server/server.js, each signed-in user's lab is kept on the
+  // server. Anywhere else (a file, the hosted artifact) it stays in this browser only.
+  const remote = { user: null, timer: null, pending: null, state: '' };
+
+  function showWho() {
+    const el = document.getElementById('who');
+    if (!remote.user) return;
+    el.hidden = false;
+    el.textContent = `${remote.user}${remote.state ? ` · ${remote.state}` : ''}`;
+    el.title = `Your labs are saved to your account (${remote.user}). Other users see their own.`;
+  }
+
+  function pushRemote(json, now) {
+    if (!remote.user) return;
+    remote.pending = json;
+    clearTimeout(remote.timer);
+    const go = () => {
+      const body = remote.pending;
+      if (!body) return;
+      remote.pending = null;
+      remote.state = 'Saving…';
+      showWho();
+      fetch('/api/state', { method: 'PUT', keepalive: body.length < 60000, headers: { 'Content-Type': 'application/json', 'X-PatchLab': '1' }, body: `{"project":${body}}` })
+        .then((r) => { remote.state = r.ok ? 'Saved' : r.status === 401 ? 'Signed out: reload to sign in' : 'Not saved'; })
+        .catch(() => { remote.state = 'Offline: saved in this browser'; })
+        .then(showWho);
+    };
+    if (now) go();
+    else remote.timer = setTimeout(go, 1200);
+  }
+
+  async function signIn() {
+    if (!/^https?:$/.test(location.protocol) || (window.claude && window.claude.use)) return null;
+    try {
+      const me = await fetch('/api/me', { headers: { 'X-PatchLab': '1' } });
+      if (!me.ok) return null;
+      remote.user = (await me.json()).email;
+      STORE = `patchlab.project.v1:${remote.user}`;
+      const st = await fetch('/api/state', { headers: { 'X-PatchLab': '1' } });
+      remote.state = 'Saved';
+      return st.status === 200 ? (await st.json()).project : null;
+    } catch (e) {
+      return null;
+    }
+  }
 
   App.isSel = (type, id) => !!App.sel && App.sel.type === type && App.sel.id === id;
 
@@ -86,6 +134,7 @@
       App.redo = [];
       App.last = json;
       store.set(STORE, json);
+      pushRemote(json);
       App.trace = null;
       App.ui.pingResult = null;
     }
@@ -98,6 +147,7 @@
     App.project = M.normalize(JSON.parse(json));
     App.last = json;
     store.set(STORE, json);
+    pushRemote(json);
     if (App.sel) {
       const gone = App.sel.type === 'device' ? !M.dev(App.project, App.sel.id) : !App.project.links.some((l) => l.id === App.sel.id);
       if (gone) App.sel = null;
@@ -461,9 +511,17 @@
     });
   }
 
-  function boot() {
+  async function boot() {
     let project = null;
-    const saved = store.get(STORE);
+    const fromServer = await signIn();
+    if (fromServer) {
+      try {
+        project = M.normalize(fromServer);
+      } catch (e) {
+        project = null;
+      }
+    }
+    const saved = project ? null : store.get(STORE);
     if (saved) {
       try {
         project = M.normalize(JSON.parse(saved));
@@ -496,6 +554,9 @@
     App.renderAll();
     App.canvas.fit();
     window.addEventListener('resize', () => App.canvas.render());
+    // Send any unsaved change before the tab goes away.
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && remote.pending) pushRemote(remote.pending, true); });
+    showWho();
     window.PatchLab = App;
   }
 

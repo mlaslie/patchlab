@@ -1,6 +1,9 @@
-# Serves the single-file build (dist/patchlab.html) as a static site on Cloud Run.
-# Rebuild it first with: node scripts/bundle.js
-FROM nginx:1.27-alpine
-COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
-COPY dist/patchlab.html /usr/share/nginx/html/index.html
+# Serves the single-file build and stores each IAP user's lab (see server/server.js).
+FROM node:22-alpine
+WORKDIR /app
+COPY server/server.js server/server.js
+COPY dist/patchlab.html dist/patchlab.html
+ENV NODE_ENV=production
+USER node
 EXPOSE 8080
+CMD ["node", "server/server.js"]

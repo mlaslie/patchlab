@@ -44,3 +44,8 @@ Status: `[ ]` not started, `[~]` in progress, `[x]` done.
   defaults, scored against the designed lab's end-to-end reachability.
 - [x] **Ask PatchLab.** Plain-English troubleshooting questions answered with the likely cause,
   more detail on request, and fix commands per device.
+
+## Hosting
+
+- [x] **Per-user labs behind IAP.** The server verifies the IAP-signed identity and keeps each
+  user's lab in Cloud Storage.

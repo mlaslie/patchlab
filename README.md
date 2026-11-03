@@ -19,8 +19,9 @@ ping PC2?" in plain English, with the fix commands for each device. It also has 
 subnet calculators, a VLSM planner, a step-by-step build guide, a printable answer sheet, config
 import from `show running-config`, and export to Cisco Modeling Labs.
 
-It's a single page of plain HTML, CSS and JavaScript, with no framework, no backend and nothing
-to install. Labs save in your browser or to a `.json` file.
+It's a single page of plain HTML, CSS and JavaScript, with no framework and nothing to install.
+Labs save in your browser or to a `.json` file, and on Cloud Run each signed-in user gets their
+own lab saved to their account.
 
 PatchLab is an independent teaching tool, not a Cisco product. Cisco names only identify the
 hardware being modelled, and the predictions are a model, not IOS, so confirm on real gear.
@@ -65,35 +66,45 @@ npm run build    # bundle everything into dist/patchlab.html, one file you can s
 
 ## Deploy to Google Cloud Run
 
-The `Dockerfile` serves the bundled `dist/patchlab.html` from nginx. These steps keep it private
-behind Identity-Aware Proxy (IAP), so only the Google accounts you allow can open it. They also
-cap the cost: it scales to zero when idle and never runs more than one instance.
+The container runs a small Node.js server (`server/server.js`, no dependencies) behind
+Identity-Aware Proxy (IAP), so only the Google accounts you allow can open it. The server checks
+the identity IAP signs into every request and keeps **each user's lab separate** in a Cloud
+Storage bucket: everyone signs in and gets their own lab, which follows them to any computer.
+It scales to zero when idle and never runs more than one instance, to keep the cost near nothing.
 
 You need the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install), Node.js and a Google
-Cloud project with billing turned on. Replace `PROJECT_ID` and `you@example.com` below. Each
-command is a single line, so it works in Terminal, PowerShell or Command Prompt.
+Cloud project with billing turned on. Replace `PROJECT_ID`, `PROJECT_NUMBER` (shown by
+`gcloud projects describe PROJECT_ID`) and `you@example.com` below. Each command is a single
+line, so it works in Terminal, PowerShell or Command Prompt.
+
+One-time setup:
 
 ```bash
 gcloud auth login
 gcloud config set project PROJECT_ID
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com iap.googleapis.com
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com iap.googleapis.com storage.googleapis.com
+gcloud storage buckets create gs://PROJECT_ID-patchlab-labs --location=us-central1 --uniform-bucket-level-access --public-access-prevention
+gcloud iam service-accounts create patchlab-run --display-name="PatchLab on Cloud Run"
+gcloud storage buckets add-iam-policy-binding gs://PROJECT_ID-patchlab-labs --member=serviceAccount:patchlab-run@PROJECT_ID.iam.gserviceaccount.com --role=roles/storage.objectUser
 ```
 
-Build the bundle, then deploy from the project folder:
+Build and deploy (run again to ship a change):
 
 ```bash
 npm run build
-gcloud run deploy patchlab --source . --region us-central1 --iap --no-allow-unauthenticated --memory 128Mi --min-instances 0 --max-instances 1 --concurrency 15
+gcloud run deploy patchlab --source . --region us-central1 --iap --no-allow-unauthenticated --service-account patchlab-run@PROJECT_ID.iam.gserviceaccount.com --set-env-vars BUCKET=PROJECT_ID-patchlab-labs,IAP_AUDIENCE=/projects/PROJECT_NUMBER/locations/us-central1/services/patchlab --memory 256Mi --min-instances 0 --max-instances 1 --concurrency 15
 ```
 
-Give yourself (and anyone else) access:
+Give each person access:
 
 ```bash
 gcloud iap web add-iam-policy-binding --resource-type=cloud-run --service=patchlab --region=us-central1 --member=user:you@example.com --role=roles/iap.httpsResourceAccessor --condition=None
 ```
 
-The deploy prints the service URL. Open it and sign in with an allowed account. To ship a
-change, run `npm run build` and the `gcloud run deploy` line again.
+The deploy prints the service URL. Open it and sign in with an allowed account; your address
+shows in the top bar with the save status. To try the server on your own machine, with a fake
+signed-in user, run `npm run serve` and open http://localhost:8080. Opened as a plain file, the
+app saves only in that browser.
 
 ## Use it
 
@@ -210,5 +221,6 @@ js/samples.js     worked example labs
 js/canvas.js      SVG canvas, drag, pan, zoom, cabling
 js/inspector.js   right-hand panels
 js/app.js         state, undo, persistence, palette, menus
+server/server.js  Cloud Run server: IAP identity check and per-user lab storage
 test/run.js       Node test suite (npm test)
 ```
