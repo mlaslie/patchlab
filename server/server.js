@@ -28,7 +28,8 @@ if (process.env.K_SERVICE && (DEV_USER || !AUD || !BUCKET)) {
   process.exit(1);
 }
 
-const PAGE_HTML = fs.readFileSync(PAGE);
+// The page is marked as served by this server, so the app only asks for /api where it exists.
+const PAGE_HTML = Buffer.from(fs.readFileSync(PAGE, 'utf8').replace('<head>', '<head>\n<meta name="patchlab-server" content="1">'));
 
 // ---------- IAP identity ----------
 
@@ -120,6 +121,18 @@ async function putObject(name, text) {
     method: 'POST', body: text, headers: { Authorization: `Bearer ${await accessToken()}`, 'Content-Type': 'application/json' },
   });
   if (!res.ok) throw new Error(`put ${name}: HTTP ${res.status}`);
+}
+
+async function deleteObject(name) {
+  if (!BUCKET) {
+    if (!fs.existsSync(localPath(name))) return false;
+    fs.unlinkSync(localPath(name));
+    return true;
+  }
+  const res = await fetch(`https://storage.googleapis.com/storage/v1/b/${BUCKET}/o/${encodeURIComponent(name)}`, { method: 'DELETE', headers: { Authorization: `Bearer ${await accessToken()}` } });
+  if (res.status === 404) return false;
+  if (!res.ok) throw new Error(`delete ${name}: HTTP ${res.status}`);
+  return true;
 }
 
 // Objects under a prefix, newest first: [{ name, updated, size }].
@@ -235,6 +248,9 @@ async function handle(req, res) {
       if (!project) return send(req, res, 400, { error: 'Not a PatchLab lab.' });
       await putObject(name, stamp(project));
       return send(req, res, 200, { ok: true, id });
+    }
+    if (req.method === 'DELETE') {
+      return (await deleteObject(name)) ? send(req, res, 200, { ok: true }) : send(req, res, 404, { error: 'No saved lab by that name.' });
     }
   }
   return send(req, res, 404, { error: 'not found' });

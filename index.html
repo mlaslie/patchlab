@@ -152,12 +152,13 @@
 <dialog id="dlg-save" class="dlg" aria-labelledby="dlg-save-title">
   <form method="dialog">
     <h2 id="dlg-save-title">Name this lab</h2>
-    <p>The name is used for the file and shown at the top of the page.</p>
+    <p id="dlg-save-intro">The name is used for the file and shown at the top of the page.</p>
     <label class="f"><span>Lab name</span><input id="dlg-save-name" maxlength="80" placeholder="e.g. VLAN routing lab 3" spellcheck="false" autocomplete="off" required></label>
     <p class="dlg-file">Saves as <code id="dlg-save-file">lab.json</code></p>
+    <p class="dlg-err" id="dlg-save-err" role="alert" hidden></p>
     <div class="btn-row">
       <button type="button" class="btn small" value="cancel" id="dlg-save-cancel">Cancel</button>
-      <button type="submit" class="btn small primary" value="save">Save</button>
+      <button type="submit" class="btn small primary" value="save" id="dlg-save-ok">Save</button>
     </div>
   </form>
 </dialog>

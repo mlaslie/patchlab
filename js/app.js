@@ -75,7 +75,7 @@
   }
 
   async function signIn() {
-    if (!/^https?:$/.test(location.protocol) || (window.claude && window.claude.use)) return null;
+    if (!document.querySelector('meta[name="patchlab-server"]')) return null;
     try {
       const me = await fetch('/api/me', { headers: { 'X-PatchLab': '1' } });
       if (!me.ok) return null;
@@ -385,64 +385,153 @@
   const UNTITLED = M.newProject().name;
   const fileNameFor = (name) => `${name.trim().replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '-') || 'lab'}.json`;
 
+  const labId = (name) => fileNameFor(name).replace(/\.json$/, '');
+  const escHtml = (x) => String(x).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const api = (path, opts) => fetch(path, { ...opts, headers: { 'Content-Type': 'application/json', 'X-PatchLab': '1', ...((opts || {}).headers || {}) } });
+
+  // Copies the lab into the user's account under its name, replacing any earlier copy.
+  function saveToAccount(project) {
+    return api(`/api/labs/${encodeURIComponent(labId(project.name))}`, { method: 'PUT', body: JSON.stringify({ project }) });
+  }
+
   // On Cloud Run a save also keeps a copy in the user's account, named after the lab, which the
   // next save of the same lab replaces. The file still downloads as before.
   function writeLabFile() {
     App.download(fileNameFor(App.project.name), JSON.stringify(App.project, null, 2), 'application/json');
     if (!remote.user) return;
-    const id = fileNameFor(App.project.name).replace(/\.json$/, '');
-    fetch(`/api/labs/${encodeURIComponent(id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-PatchLab': '1' }, body: JSON.stringify({ project: App.project }) })
-      .then((r) => App.toast(r.ok ? `Saved "${App.project.name}" to your account and downloaded it.` : `Downloaded, but saving to your account failed (${r.status}).`))
-      .catch(() => App.toast('Downloaded, but saving to your account failed: offline.'));
+    saveToAccount(App.project)
+      .then((r) => App.toast(r.ok ? `Saved "${App.project.name}" to Your labs and downloaded it.` : `Downloaded, but saving to Your labs failed (${r.status}).`))
+      .catch(() => App.toast('Downloaded, but saving to Your labs failed: offline.'));
   }
 
-  // The "Your saved labs" part of the Labs menu, filled each time the menu opens.
-  function fillSavedLabs() {
-    const box = document.getElementById('menu-saved');
-    if (!box) return;
+  // The user's saved labs, as last listed by the server.
+  async function listYourLabs() {
+    const r = await api('/api/labs');
+    if (!r.ok) throw new Error(r.status);
+    remote.labs = (await r.json()).labs;
+    return remote.labs;
+  }
+
+  // Asks for a lab name. `check` returns an error to show, or '' to accept the name.
+  function askName({ title, intro, ok, check }) {
+    const dlg = document.getElementById('dlg-save');
+    const form = dlg.querySelector('form');
+    const input = document.getElementById('dlg-save-name');
+    const file = document.getElementById('dlg-save-file');
+    const err = document.getElementById('dlg-save-err');
+    document.getElementById('dlg-save-title').textContent = title;
+    document.getElementById('dlg-save-intro').textContent = intro;
+    document.getElementById('dlg-save-ok').textContent = ok;
+    input.value = '';
+    err.hidden = true;
+    file.textContent = fileNameFor('');
+    input.oninput = () => { file.textContent = fileNameFor(input.value); err.hidden = true; };
+    return new Promise((resolve) => {
+      // Resolve once, from whichever comes first: the submit handler or the dialog closing
+      // (Cancel, Esc). The close event alone is not reliable when close() runs inside submit.
+      let done = false;
+      const finish = (v) => {
+        if (!done) {
+          done = true;
+          resolve(v);
+        }
+      };
+      document.getElementById('dlg-save-cancel').onclick = () => dlg.close('cancel');
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        const name = input.value.trim();
+        if (!name) return;
+        const problem = check ? await check(name) : '';
+        if (problem) {
+          err.textContent = problem;
+          err.hidden = false;
+          return;
+        }
+        dlg.close('save');
+        finish(name);
+      };
+      dlg.onclose = () => finish(dlg.returnValue === 'save' ? input.value.trim() : null);
+      dlg.returnValue = '';
+      dlg.showModal();
+      input.focus();
+    });
+  }
+
+  // A lab still called "Untitled lab" gets a name before it is saved, so files are not all
+  // Untitled-lab.json. Named labs save straight away.
+  async function saveLab() {
+    const current = (App.project.name || '').trim();
+    if (current && current !== UNTITLED) return writeLabFile();
+    const name = await askName({ title: 'Name this lab', intro: 'The name is used for the file and shown at the top of the page.', ok: 'Save' });
+    if (!name) return;
+    App.project.name = name;
+    App.commit();
+    writeLabFile();
+  }
+
+  // A new lab starts with a name. On Cloud Run it goes straight into Your labs; a name already
+  // there is refused rather than overwriting that lab.
+  async function newLab() {
+    const name = await askName({
+      title: 'New lab',
+      intro: remote.user ? 'It starts empty and is added to Your labs.' : 'It starts empty. The name is shown at the top of the page and used for the file.',
+      ok: 'Create',
+      check: async (n) => {
+        if (!remote.user) return '';
+        try {
+          const labs = await listYourLabs();
+          return labs.some((l) => l.id === labId(n)) ? `You already have a lab called "${n}". Pick another name, or open that one from the Labs menu.` : '';
+        } catch (e) {
+          return 'Could not reach your account. Try again in a moment.';
+        }
+      },
+    });
+    if (!name) return;
+    App.loadProject(M.newProject(name), `Started "${name}". Undo brings the previous lab back.`);
+    if (!remote.user) return;
+    saveToAccount(App.project).then((r) => App.toast(r.ok ? `Started "${name}" and added it to Your labs.` : `Started "${name}", but adding it to Your labs failed (${r.status}).`))
+      .catch(() => App.toast(`Started "${name}", but adding it to Your labs failed: offline.`));
+  }
+
+  // The "Your labs" list in the Labs menu, filled each time the menu opens.
+  function fillYourLabs() {
+    const box = document.getElementById('menu-yours');
     if (!remote.user) {
       box.hidden = true;
       return;
     }
     box.hidden = false;
-    box.innerHTML = '<div class="eyebrow">Your saved labs</div><p class="menu-note">Loading…</p>';
-    fetch('/api/labs', { headers: { 'X-PatchLab': '1' } }).then((r) => (r.ok ? r.json() : Promise.reject(r.status))).then(({ labs }) => {
+    const list = box.querySelector('.menu-list');
+    list.innerHTML = '<p class="menu-note">Loading…</p>';
+    listYourLabs().then((labs) => {
       const when = (iso) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
-      const esc = (x) => String(x).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-      box.innerHTML = `<div class="eyebrow">Your saved labs</div>${labs.length
-        ? labs.map((l) => `<button type="button" data-saved="${esc(l.id)}"><span>${esc(l.id.replace(/-/g, ' '))}</span><small>Saved ${esc(when(l.savedAt))}</small></button>`).join('')
-        : '<p class="menu-note">None yet. Save lab as a file keeps a copy here too.</p>'}`;
-    }).catch(() => { box.innerHTML = '<div class="eyebrow">Your saved labs</div><p class="menu-note">Could not load your saved labs.</p>'; });
+      const open = labId(App.project.name || '');
+      list.innerHTML = labs.length ? labs.map((l) => `<div class="menu-row" data-row="${escHtml(l.id)}">
+          <button type="button" data-saved="${escHtml(l.id)}"><span>${escHtml(l.id.replace(/-/g, ' '))}${l.id === open ? ' <i class="menu-tag">open</i>' : ''}</span><small>Saved ${escHtml(when(l.savedAt))}</small></button>
+          <button type="button" class="x" data-del="${escHtml(l.id)}" aria-label="Delete ${escHtml(l.id.replace(/-/g, ' '))}" title="Delete">&times;</button></div>`).join('')
+        : '<p class="menu-note">None yet. New lab and Save lab add labs here.</p>';
+    }).catch(() => { list.innerHTML = '<p class="menu-note">Could not load your labs.</p>'; });
+  }
+
+  // The × swaps the row for a confirmation; only "Delete" removes the lab.
+  function confirmDelete(row, id) {
+    const label = id.replace(/-/g, ' ');
+    row.innerHTML = `<div class="menu-confirm"><span>Delete "${escHtml(label)}"? This cannot be undone.</span>
+      <span class="btn-row"><button type="button" class="btn small" data-cancel>Cancel</button><button type="button" class="btn small danger" data-confirm="${escHtml(id)}">Delete</button></span></div>`;
+    row.querySelector('[data-confirm]').focus();
+  }
+
+  function deleteLab(id) {
+    api(`/api/labs/${encodeURIComponent(id)}`, { method: 'DELETE' })
+      .then((r) => App.toast(r.ok ? `Deleted "${id.replace(/-/g, ' ')}" from Your labs.` : `Could not delete it (${r.status}).`))
+      .catch(() => App.toast('Could not delete it: offline.'))
+      .then(fillYourLabs);
   }
 
   function openSavedLab(id) {
-    fetch(`/api/labs/${encodeURIComponent(id)}`, { headers: { 'X-PatchLab': '1' } }).then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-      .then((doc) => App.loadProject(doc.project, `Opened "${doc.project.name}" from your account. Undo brings your previous lab back.`))
-      .catch(() => App.toast('Could not open that saved lab.'));
-  }
-
-  // A lab still called "Untitled lab" gets a name before it is saved, so files are not all
-  // Untitled-lab.json. Named labs save straight away.
-  function saveLab() {
-    const current = (App.project.name || '').trim();
-    if (current && current !== UNTITLED) return writeLabFile();
-    const dlg = document.getElementById('dlg-save');
-    const input = document.getElementById('dlg-save-name');
-    const file = document.getElementById('dlg-save-file');
-    input.value = '';
-    file.textContent = fileNameFor('');
-    input.oninput = () => { file.textContent = fileNameFor(input.value); };
-    document.getElementById('dlg-save-cancel').onclick = () => dlg.close('cancel');
-    dlg.onclose = () => {
-      const name = input.value.trim();
-      if (dlg.returnValue !== 'save' || !name) return;
-      App.project.name = name;
-      App.commit();
-      writeLabFile();
-    };
-    dlg.returnValue = '';
-    dlg.showModal();
-    input.focus();
+    api(`/api/labs/${encodeURIComponent(id)}`).then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((doc) => App.loadProject(doc.project, `Opened "${doc.project.name}" from Your labs. Undo brings your previous lab back.`))
+      .catch(() => App.toast('Could not open that lab.'));
   }
 
   // ---------- Labs menu ----------
@@ -454,24 +543,33 @@
       menu.hidden = true;
       btn.setAttribute('aria-expanded', 'false');
     };
-    menu.innerHTML = `<div id="menu-saved" hidden></div>${PL.samples.map((s) => `<button type="button" data-sample="${s.id}"><span>${s.title}</span><small>${s.blurb}</small></button>`).join('')}
+    menu.innerHTML = `<div class="menu-sect" id="menu-yours" hidden><div class="eyebrow">Your labs</div><div class="menu-list"></div></div>
+      <div class="menu-sect"><div class="eyebrow">Example labs</div>${PL.samples.map((s) => `<button type="button" data-sample="${s.id}"><span>${s.title}</span><small>${s.blurb}</small></button>`).join('')}</div>
       <hr>
-      <button type="button" data-do="new"><span>New blank lab</span></button>
-      <button type="button" data-do="import"><span>Open a saved lab</span><small>Load a .json file you exported</small></button>
+      <button type="button" data-do="new"><span>New lab…</span><small id="new-hint">Starts empty, with a name</small></button>
+      <button type="button" data-do="import"><span>Open a lab file</span><small>Load a .json file you saved</small></button>
       <button type="button" data-do="export"><span>Save lab as a file</span><small id="save-hint">Downloads a .json file</small></button>
       <button type="button" data-do="copyjson"><span>Copy lab data</span><small>Paste into a .json file where downloads are blocked</small></button>`;
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       menu.hidden = !menu.hidden;
       btn.setAttribute('aria-expanded', String(!menu.hidden));
-      if (!menu.hidden) fillSavedLabs();
+      if (!menu.hidden) {
+        menu.scrollTop = 0;
+        fillYourLabs();
+      }
     });
     document.addEventListener('pointerdown', (e) => {
       if (!menu.hidden && !menu.contains(e.target) && e.target !== btn) close();
     });
+    menu.addEventListener('keydown', (e) => { if (e.key === 'Escape') { close(); btn.focus(); } });
     menu.addEventListener('click', (e) => {
       const b = e.target.closest('button');
       if (!b) return;
+      // Deleting asks first, inside the menu, so the menu stays open.
+      if (b.dataset.del) return confirmDelete(b.closest('.menu-row'), b.dataset.del);
+      if ('cancel' in b.dataset) return fillYourLabs();
+      if (b.dataset.confirm) return deleteLab(b.dataset.confirm);
       close();
       if (b.dataset.saved) return openSavedLab(b.dataset.saved);
       if (b.dataset.sample) {
@@ -479,7 +577,7 @@
         return App.loadProject(s.build(), `Loaded ${s.title}. Undo brings your previous lab back.`);
       }
       const what = b.dataset.do;
-      if (what === 'new') App.loadProject(M.newProject(), 'Started a blank lab. Undo brings the previous one back.');
+      if (what === 'new') newLab();
       if (what === 'import') document.getElementById('file-import').click();
       if (what === 'export') saveLab();
       if (what === 'copyjson') App.copy(JSON.stringify(App.project));
@@ -593,7 +691,10 @@
     // Send any unsaved change before the tab goes away.
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && remote.pending) pushRemote(remote.pending, true); });
     showWho();
-    if (remote.user) document.getElementById('save-hint').textContent = 'Downloads a .json file and keeps a copy in your account';
+    if (remote.user) {
+      document.getElementById('save-hint').textContent = 'Downloads a .json file and keeps a copy in Your labs';
+      document.getElementById('new-hint').textContent = 'Starts empty, with a name, in Your labs';
+    }
     window.PatchLab = App;
   }
 
